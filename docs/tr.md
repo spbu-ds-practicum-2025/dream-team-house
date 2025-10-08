@@ -240,882 +240,584 @@
 
 ### Сценарий 1: Инициализация работы над документом
 
-1. Пользователь открывает веб-интерфейс (Next.js Frontend) в браузере по адресу `https://p2p-chat.vitasha.ru/` (поддомен
-   второго уровня на существующем личном домене Тим-лида). Далее по тексту вместо доменов используются локальные адреса.
-2. На главной странице заполняет форму инициализации:
-    - **Тема документа:** "История квантовых вычислений"
-    - **Начальный текст:** "Квантовые вычисления — это область, изучающая использование квантовых явлений для обработки
-      информации."
+1. Пользователь открывает веб-интерфейс по адресу `http://localhost:3000`.
+2. Заполняет форму: тема документа, начальный текст.
 3. Нажимает кнопку "Начать работу".
-4. Frontend отправляет запрос:
-   ```
-   POST http://localhost/api/document/init
-   Content-Type: application/json
-   
-   {
-     "topic": "История квантовых вычислений",
-     "initial_text": "Квантовые вычисления — это область, изучающая использование квантовых явлений для обработки информации."
-   }
-   ```
-5. Load Balancer перенаправляет запрос на один из узлов Text Service (например, узел A).
-6. Text Service A создаёт запись в PostgreSQL:
-   ```sql
-   INSERT INTO documents (version, text, timestamp, edit_id)
-   VALUES (1, 'Квантовые вычисления — это область...', NOW(), NULL);
-   
-   INSERT INTO token_budget (id, total_tokens, limit_tokens)
-   VALUES (1, 0, 15000000)
-   ON CONFLICT (id) DO UPDATE SET total_tokens = 0;
-   ```
-7. Text Service A возвращает ответ:
-   ```
-   201 Created
-   {
-     "document_id": "doc-abc-123",
-     "status": "initialized",
-     "version": 1
-   }
-   ```
-8. Frontend получает ответ и перенаправляет пользователя на страницу `/document`.
-9. Backend система (через docker-compose или оркестратор) автоматически запускает 10 Docker-контейнеров с AI-агентами,
-   передавая каждому агенту конфигурацию через переменные окружения:
-   ```
-   AGENT_ROLE="Ты эксперт по квантовой физике. Добавляй технически точные детали."
-   API_TOKEN="agent-token-001"
-   TEXT_SERVICE_URL="http://load-balancer/api"
-   CHAT_SERVICE_URL="http://load-balancer/api"
-   OPENAI_API_KEY="sk-..."
-   ```
-10. Агенты начинают циклическую работу.
+4. Frontend отправляет `POST /api/document/init` с данными формы.
+5. Text Service создаёт документ с версией 1 в базе данных.
+6. Система автоматически запускает 10 Docker-контейнеров с AI-агентами, передавая каждому роль и токен через переменные
+   окружения.
+7. Агенты начинают циклическую работу.
 
-### Сценарий 2: Работа AI-агента (подробный цикл)
+### Сценарий 2: Работа AI-агента
 
-1. AI-агент (Docker-контейнер с Node.js 20) запускается и читает переменные окружения.
-2. Агент входит в бесконечный цикл работы:
+1. Агент запускается с переменными окружения (роль, токен, URL сервисов, ключ OpenAI).
+2. Агент запрашивает текущий документ: `GET /api/document/current`.
+3. Получает текст документа от Text Service.
+4. Отправляет текст и свою инструкцию в OpenAI API для генерации правки.
+5. Получает предложение изменения от LLM.
+6. Отправляет правку в Text Service: `POST /api/edits`.
+7. Публикует информационное сообщение в Chat Service: `POST /api/chat/messages`.
+8. Ожидает 1 секунду и повторяет цикл.
+9. При получении 429 (превышение бюджета) завершает работу.
 
-**Итерация цикла:**
+### Сценарий 3: Обработка правки в Text Service
 
-3. **Шаг 1: Получение документа.**
-    - Агент отправляет запрос:
-      ```
-      GET http://load-balancer/api/document/current
-      Authorization: Bearer agent-token-001
-      ```
-    - Load Balancer перенаправляет запрос на Text Service B (по round-robin).
-    - Text Service B выполняет SQL-запрос:
-      ```sql
-      SELECT version, text, timestamp
-      FROM documents
-      ORDER BY version DESC
-      LIMIT 1;
-      ```
-    - PostgreSQL B возвращает:
-      ```
-      version: 5
-      text: "Квантовые вычисления — это область... [текст 2000 символов]"
-      timestamp: "2024-11-10T14:23:45Z"
-      ```
-    - Text Service B возвращает агенту:
-      ```
-      200 OK
-      {
-        "version": 5,
-        "text": "Квантовые вычисления...",
-        "timestamp": "2024-11-10T14:23:45Z"
-      }
-      ```
-
-4. **Шаг 2: Генерация правки через OpenAI API.**
-    - Агент формирует промпт для LLM:
-      ```javascript
-      const messages = [
-        {
-          role: "system",
-          content: process.env.AGENT_ROLE
-        },
-        {
-          role: "user",
-          content: `Прочитай документ и предложи ОДНУ конкретную правку (добавление, удаление или замену текста). Укажи точную позицию изменения.\n\nДокумент:\n${documentText}`
-        }
-      ];
-      ```
-    - Агент отправляет запрос в OpenAI:
-      ```
-      POST https://api.openai.com/v1/chat/completions
-      Authorization: Bearer sk-...
-      Content-Type: application/json
-      
-      {
-        "model": "gpt-4-turbo",
-        "messages": [...],
-        "temperature": 0.7,
-        "max_tokens": 500
-      }
-      ```
-    - OpenAI API возвращает:
-      ```
-      200 OK
-      {
-        "choices": [{
-          "message": {
-            "content": "Предлагаю добавить после второго абзаца:\n\n'Одним из ключевых принципов квантовых вычислений является суперпозиция — способность кубита находиться одновременно в состояниях |0⟩ и |1⟩.'\n\nПозиция: after_paragraph_2"
-          }
-        }],
-        "usage": {
-          "total_tokens": 450
-        }
-      }
-      ```
-    - Агент парсит ответ, извлекает текст правки, позицию и количество токенов.
-
-5. **Шаг 3: Отправка правки в Text Service.**
-    - Агент отправляет запрос:
-      ```
-      POST http://load-balancer/api/edits
-      Authorization: Bearer agent-token-001
-      Content-Type: application/json
-      
-      {
-        "agent_id": "agent-physics-001",
-        "proposed_text": "Одним из ключевых принципов квантовых вычислений является суперпозиция — способность кубита находиться одновременно в состояниях |0⟩ и |1⟩.",
-        "position": "after_paragraph_2",
-        "tokens_used": 450
-      }
-      ```
-    - Load Balancer перенаправляет запрос на Text Service A.
-    - Text Service A обрабатывает правку (подробности в Сценарии 3).
-    - Text Service A возвращает агенту:
-      ```
-      201 Created
-      {
-        "edit_id": "edit-789",
-        "status": "accepted",
-        "version": 6
-      }
-      ```
-
-6. **Шаг 4: Публикация сообщения в Chat Service.**
-    - Агент отправляет запрос:
-      ```
-      POST http://load-balancer/api/chat/messages
-      Authorization: Bearer agent-token-001
-      Content-Type: application/json
-      
-      {
-        "agent_id": "agent-physics-001",
-        "message": "Добавил раздел о принципе суперпозиции (правка #edit-789)"
-      }
-      ```
-    - Load Balancer перенаправляет запрос в Chat Service.
-    - Chat Service сохраняет сообщение в Redis:
-      ```
-      XADD chat:messages MAXLEN ~ 1000 *
-        agent_id agent-physics-001
-        message "Добавил раздел о принципе суперпозиции (правка #edit-789)"
-        timestamp 2024-11-10T14:24:12Z
-      ```
-    - Redis возвращает ID сообщения: `1699623852000-0`.
-    - Chat Service возвращает агенту:
-      ```
-      200 OK
-      {
-        "message_id": "1699623852000-0",
-        "timestamp": "2024-11-10T14:24:12Z"
-      }
-      ```
-
-7. **Шаг 5: Ожидание перед следующей итерацией.**
-    - Агент выполняет `await sleep(1000)` (ожидание 1 секунду).
-
-8. **Шаг 6: Повторение цикла.**
-    - Агент возвращается к Шагу 1 (получение документа).
-
-**Обработка ошибок:**
-
-- Если на Шаге 1 или 3 агент получает ошибку (timeout, 500, 503), он применяет retry логику с экспоненциальным backoff:
-  ждёт 1 сек, затем 2 сек, затем 4 сек, до максимум 5 попыток.
-- Если агент получает `429 Too Many Requests` (бюджет исчерпан), он логирует сообщение и завершает работу (выходит из
-  цикла, контейнер останавливается).
-
-### Сценарий 3: Обработка правки в Text Service (детальная транзакция)
-
-1. Text Service A получает запрос `POST /api/edits` от агента через Load Balancer.
-2. Text Service A валидирует запрос:
-    - Проверяет наличие заголовка `Authorization` и корректность токена (сравнение с хранимым списком валидных токенов).
-    - Проверяет корректность JSON-тела запроса.
-    - Проверяет длину `proposed_text` (должна быть ≤ 10000 символов).
-    - Проверяет, что `tokens_used` — положительное число.
-3. Text Service A начинает транзакцию в PostgreSQL A:
-   ```sql
-   BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
-   ```
-4. **Проверка бюджета токенов:**
-   ```sql
-   SELECT total_tokens, limit_tokens
-   FROM token_budget
-   WHERE id = 1
-   FOR UPDATE;
-   -- Возвращает: total_tokens = 5430000, limit_tokens = 15000000
-   ```
-    - Text Service A вычисляет: `5430000 + 450 = 5430450` (в пределах лимита).
-
-5. **Создание записи правки:**
-   ```sql
-   INSERT INTO edits (edit_id, agent_id, proposed_text, position, tokens_used, status, created_at)
-   VALUES (gen_random_uuid(), 'agent-physics-001', 'Одним из ключевых принципов...', 'after_paragraph_2', 450, 'pending', NOW())
-   RETURNING edit_id;
-   -- Возвращает: edit_id = 'edit-789'
-   ```
-
-6. **Получение текущей версии документа:**
-   ```sql
-   SELECT version, text
-   FROM documents
-   ORDER BY version DESC
-   LIMIT 1
-   FOR UPDATE;
-   -- Возвращает: version = 5, text = "Квантовые вычисления..."
-   ```
-    - Text Service A блокирует строку документа (FOR UPDATE) для предотвращения конкурентных изменений.
-
-7. **Проверка конфликтов:**
-    - Text Service A парсит `position: "after_paragraph_2"`.
-    - Проверяет, что второй абзац всё ещё существует в тексте (разделители абзацев: `\n\n`).
-    - Проверяет, что за последние 5 секунд не было других правок с той же позицией:
-      ```sql
-      SELECT COUNT(*) FROM edits
-      WHERE position = 'after_paragraph_2'
-        AND status = 'accepted'
-        AND created_at > NOW() - INTERVAL '5 seconds';
-      -- Возвращает: 0 (конфликтов нет)
-      ```
-
-8. **Применение правки к тексту:**
-    - Text Service A находит позицию второго абзаца в тексте (индекс символа).
-    - Вставляет `proposed_text` после второго абзаца.
-    - Формирует новый текст документа.
-
-9. **Создание новой версии документа:**
-   ```sql
-   INSERT INTO documents (version, text, timestamp, edit_id)
-   VALUES (6, '[новый текст с правкой]', NOW(), 'edit-789');
-   ```
-
-10. **Обновление статуса правки:**
-    ```sql
-    UPDATE edits
-    SET status = 'accepted'
-    WHERE edit_id = 'edit-789';
-    ```
-
-11. **Обновление счётчика токенов:**
-    ```sql
-    UPDATE token_budget
-    SET total_tokens = total_tokens + 450
-    WHERE id = 1;
-    ```
-
-12. **Коммит транзакции:**
-    ```sql
-    COMMIT;
-    ```
-
-13. **Инициирование репликации (асинхронно, вне транзакции):**
-    - Text Service A формирует репликационное сообщение:
-      ```json
-      {
-        "version": 6,
-        "diff": "INSERT at char_index 245: 'Одним из ключевых принципов...'",
-        "timestamp": "2024-11-10T14:24:10.123Z",
-        "edit_id": "edit-789",
-        "full_text": "[полный текст документа версии 6]"
-      }
-      ```
-    - Text Service A асинхронно (через asyncio.create_task) отправляет запросы:
-      ```
-      POST http://text-service-b:8000/api/replication/sync
-      Content-Type: application/json
-      
-      {JSON сообщение выше}
-      ```
-      ```
-      POST http://text-service-c:8000/api/replication/sync
-      Content-Type: application/json
-      
-      {JSON сообщение выше}
-      ```
-    - Text Service A НЕ ЖДЁТ ответов от узлов B и C (eventual consistency).
-
-14. **Отправка события в Analytics Service (асинхронно):**
-    - Text Service A отправляет:
-      ```
-      POST http://analytics-service:8000/api/analytics/events
-      Content-Type: application/json
-      
-      {
-        "event_type": "edit_applied",
-        "agent_id": "agent-physics-001",
-        "version": 6,
-        "tokens": 450,
-        "timestamp": "2024-11-10T14:24:10.123Z",
-        "metadata": {
-          "edit_id": "edit-789",
-          "node": "text-service-a",
-          "position": "after_paragraph_2"
-        }
-      }
-      ```
-
-15. **Возврат ответа агенту:**
-    ```
-    201 Created
-    Content-Type: application/json
-    
-    {
-      "edit_id": "edit-789",
-      "status": "accepted",
-      "version": 6,
-      "timestamp": "2024-11-10T14:24:10.123Z"
-    }
-    ```
-
-**Если бюджет превышен (на Шаге 4):**
-
-- Text Service A обнаруживает: `5430000 + 450000 = 5880000 > 15000000`.
-- Text Service A выполняет `ROLLBACK;` (откат транзакции).
-- Text Service A возвращает агенту:
-  ```
-  429 Too Many Requests
-  Content-Type: application/json
-  
-  {
-    "error": "Token budget exceeded",
-    "used": 5430000,
-    "limit": 15000000,
-    "requested": 450000
-  }
-  ```
+1. Text Service получает правку от агента через Load Balancer.
+2. Валидирует запрос (токен, корректность JSON, длина текста).
+3. Начинает транзакцию в PostgreSQL.
+4. Проверяет бюджет токенов. Если превышен — откатывает транзакцию и возвращает 429.
+5. Создаёт запись правки со статусом "pending".
+6. Получает текущую версию документа с блокировкой строки.
+7. Проверяет отсутствие конфликтов (другие правки не изменили ту же позицию).
+8. Применяет правку к тексту, формирует новую версию документа.
+9. Сохраняет новую версию, обновляет статус правки на "accepted", обновляет счётчик токенов.
+10. Коммитит транзакцию.
+11. Асинхронно отправляет репликационное сообщение двум другим узлам: `POST /api/replication/sync`.
+12. Асинхронно отправляет событие в Analytics Service: `POST /api/analytics/events`.
+13. Возвращает агенту ответ с ID правки, статусом и версией документа.
 
 ### Сценарий 4: Репликация между узлами Text Service
 
-1. Text Service B (узел Санкт-Петербург) получает запрос от Text Service A:
-   ```
-   POST http://text-service-b:8000/api/replication/sync
-   Content-Type: application/json
-   
-   {
-     "version": 6,
-     "diff": "INSERT at char_index 245: 'Одним из ключевых принципов...'",
-     "timestamp": "2024-11-10T14:24:10.123Z",
-     "edit_id": "edit-789",
-     "full_text": "[полный текст документа версии 6]"
-   }
-   ```
-
-2. Text Service B валидирует запрос (проверяет, что запрос исходит от доверенного узла — по IP или shared secret).
-
-3. Text Service B начинает транзакцию в PostgreSQL B:
-   ```sql
-   BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
-   ```
-
-4. **Проверка текущей версии:**
-   ```sql
-   SELECT version, text
-   FROM documents
-   ORDER BY version DESC
-   LIMIT 1
-   FOR UPDATE;
-   -- Возвращает: version = 5, text = "Квантовые вычисления..."
-   ```
-
-5. **Определение стратегии применения:**
-    - Text Service B проверяет: `текущая_версия (5) + 1 == новая_версия (6)` → версии последовательны, можно применить
-      diff.
-    - Если бы версии не были последовательны (например, текущая версия 4, а приходит версия 6), Text Service B:
-        - Откатывает транзакцию.
-        - Отправляет запрос `GET /api/replication/catch-up?since_version=4` к узлу A.
-        - Получает версии 5 и 6, применяет их последовательно.
-
-6. **Применение изменения (используем full_text для упрощения):**
-    - Text Service B может либо применить diff (вставка текста по индексу), либо использовать `full_text` из сообщения.
-    - Для надёжности используем `full_text`:
-   ```sql
-   INSERT INTO documents (version, text, timestamp, edit_id)
-   VALUES (6, '[полный текст из сообщения]', '2024-11-10T14:24:10.123Z', 'edit-789');
-   ```
-
-7. **Сохранение записи правки (если её нет):**
-   ```sql
-   INSERT INTO edits (edit_id, agent_id, proposed_text, position, tokens_used, status, created_at)
-   VALUES ('edit-789', 'agent-physics-001', '...', 'after_paragraph_2', 450, 'accepted', '2024-11-10T14:24:10.123Z')
-   ON CONFLICT (edit_id) DO NOTHING;
-   ```
-
-8. **Коммит транзакции:**
-   ```sql
-   COMMIT;
-   ```
-
-9. **Отправка подтверждения узлу A:**
-   ```
-   200 OK
-   Content-Type: application/json
-   
-   {
-     "status": "synced",
-     "version": 6,
-     "node": "text-service-b",
-     "timestamp": "2024-11-10T14:24:11.456Z"
-   }
-   ```
-
-10. **Отправка события в Analytics:**
-    ```
-    POST http://analytics-service:8000/api/analytics/events
-    
-    {
-      "event_type": "replication_success",
-      "version": 6,
-      "timestamp": "2024-11-10T14:24:11.456Z",
-      "metadata": {
-        "source_node": "text-service-a",
-        "target_node": "text-service-b",
-        "latency_ms": 1333
-      }
-    }
-    ```
-
-11. Аналогичный процесс происходит на Text Service C (узел Новосибирск).
-
-12. Через 1-2 секунды все три узла (A, B, C) имеют идентичную версию 6 документа. **Eventual consistency достигнута.**
+1. Text Service B получает репликационное сообщение от узла A с новой версией документа.
+2. Валидирует запрос (проверяет доверенный источник).
+3. Начинает транзакцию в своей базе данных.
+4. Проверяет текущую версию документа.
+5. Если версии последовательны — применяет изменение из сообщения.
+6. Если версии не последовательны — запрашивает пропущенные версии через `GET /api/replication/catch-up`.
+7. Сохраняет новую версию документа и запись правки.
+8. Коммитит транзакцию.
+9. Возвращает подтверждение узлу A.
+10. Отправляет событие успешной репликации в Analytics Service.
+11. Аналогично узел C обрабатывает репликацию.
+12. Все три узла достигают eventual consistency в течение 1-3 секунд.
 
 ### Сценарий 5: Отказ узла Text Service и восстановление
 
-**Начальное состояние:**
-
-- Text Service A, B, C работают, синхронизированы на версии 42.
-
-**Отказ узла:**
-
-1. В момент времени T0 Docker-контейнер Text Service B падает (команда `docker stop text-service-b` или OOM Killer
-   завершает процесс).
-2. Load Balancer продолжает направлять запросы по round-robin: треть запросов идёт на B.
-3. Через 5 секунд (timeout) Load Balancer обнаруживает, что узел B не отвечает на health check `GET /health`.
-4. Load Balancer помечает узел B как недоступный и исключает его из пула.
-5. Теперь все запросы маршрутизируются только на узлы A и C.
-
-**Работа без узла B:**
-
-6. Агент отправляет правку: `POST http://load-balancer/api/edits`.
-7. Load Balancer направляет запрос на узел A (или C).
-8. Узел A применяет правку, создаёт версию 43.
-9. Узел A пытается реплицировать на B и C:
-    - `POST http://text-service-b:8000/api/replication/sync` → **Connection refused** (узел B недоступен).
-    - `POST http://text-service-c:8000/api/replication/sync` → **200 OK** (узел C успешно применяет версию 43).
-10. Узел A логирует ошибку репликации для узла B:
-    ```
-    ERROR: Failed to replicate version 43 to text-service-b: Connection refused
-    ```
-11. Узел A отправляет событие в Analytics:
-    ```json
-    {
-      "event_type": "replication_failed",
-      "version": 43,
-      "timestamp": "...",
-      "metadata": {
-        "source_node": "text-service-a",
-        "target_node": "text-service-b",
-        "error": "Connection refused"
-      }
-    }
-    ```
-12. За следующие 5 минут применяются правки, версия на узлах A и C достигает 50. Узел B остаётся на версии 42.
-
-**Восстановление узла B:**
-
-13. Администратор или система мониторинга перезапускает контейнер: `docker start text-service-b`.
-14. Text Service B запускается и выполняет процедуру startup:
-    - Читает свою текущую версию из PostgreSQL B:
-      ```sql
-      SELECT version FROM documents ORDER BY version DESC LIMIT 1;
-      -- Возвращает: 42
-      ```
-    - Отправляет запрос на один из других узлов (A или C) для определения актуальной версии:
-      ```
-      GET http://text-service-a:8000/api/document/current
-      ```
-    - Text Service A возвращает:
-      ```json
-      {
-        "version": 50,
-        "text": "...",
-        "timestamp": "..."
-      }
-      ```
-    - Text Service B обнаруживает отставание: `50 - 42 = 8 версий`.
-
-15. Text Service B запрашивает пропущенные версии:
-    ```
-    GET http://text-service-a:8000/api/replication/catch-up?since_version=42
-    ```
-
-16. Text Service A выполняет запрос к PostgreSQL A:
-    ```sql
-    SELECT version, text, timestamp, edit_id
-    FROM documents
-    WHERE version > 42
-    ORDER BY version ASC;
-    -- Возвращает 8 строк (версии 43-50)
-    ```
-
-17. Text Service A формирует ответ:
-    ```json
-    200 OK
-    {
-      "versions": [
-        {
-          "version": 43,
-          "full_text": "[текст версии 43]",
-          "timestamp": "2024-11-10T14:25:00Z",
-          "edit_id": "edit-790"
-        },
-        {
-          "version": 44,
-          "full_text": "[текст версии 44]",
-          "timestamp": "2024-11-10T14:25:15Z",
-          "edit_id": "edit-791"
-        },
-        ...
-        {
-          "version": 50,
-          "full_text": "[текст версии 50]",
-          "timestamp": "2024-11-10T14:30:00Z",
-          "edit_id": "edit-797"
-        }
-      ]
-    }
-    ```
-
-18. Text Service B последовательно применяет каждую версию в транзакциях PostgreSQL B:
-    ```sql
-    BEGIN;
-    INSERT INTO documents (version, text, timestamp, edit_id)
-    VALUES (43, '[текст версии 43]', '2024-11-10T14:25:00Z', 'edit-790');
-    COMMIT;
-    
-    BEGIN;
-    INSERT INTO documents (version, text, timestamp, edit_id)
-    VALUES (44, '[текст версии 44]', '2024-11-10T14:25:15Z', 'edit-791');
-    COMMIT;
-    
-    ... (повторяет для версий 45-50)
-    ```
-
-19. Text Service B логирует успешное восстановление:
-    ```
-    INFO: Successfully caught up from version 42 to 50. Applied 8 versions.
-    ```
-
-20. Text Service B отправляет событие в Analytics:
-    ```json
-    {
-      "event_type": "node_recovered",
-      "timestamp": "...",
-      "metadata": {
-        "node": "text-service-b",
-        "from_version": 42,
-        "to_version": 50,
-        "versions_applied": 8
-      }
-    }
-    ```
-
-21. Text Service B возвращается в работу, начинает отвечать на `GET /health` с кодом 200.
-
-22. Load Balancer обнаруживает, что узел B снова доступен (health check успешен), и добавляет его обратно в пул
-    маршрутизации.
-
-23. Система полностью восстановлена, все три узла (A, B, C) синхронизированы на версии 50.
+1. Docker-контейнер Text Service B падает (текущая версия на всех узлах: 42).
+2. Load Balancer обнаруживает недоступность узла B через health check (timeout 5 секунд).
+3. Load Balancer исключает узел B из пула маршрутизации.
+4. Все запросы обрабатываются только узлами A и C.
+5. Агенты продолжают работу, применяются правки, версия на узлах A и C достигает 50.
+6. Узел A логирует ошибки репликации для узла B и отправляет события в Analytics.
+7. Администратор перезапускает контейнер узла B.
+8. Узел B при запуске читает свою локальную версию (42) и запрашивает текущую версию у узла A.
+9. Обнаруживает отставание (50 - 42 = 8 версий).
+10. Отправляет запрос: `GET /api/replication/catch-up?since_version=42`.
+11. Узел A возвращает массив пропущенных версий (43-50).
+12. Узел B последовательно применяет все версии в транзакциях.
+13. Узел B возвращается в работу, отправляет событие восстановления в Analytics.
+14. Load Balancer добавляет узел B обратно в пул.
+15. Система полностью восстановлена, все три узла синхронизированы на версии 50.
 
 ### Сценарий 6: Исчерпание бюджета токенов
 
-**Начальное состояние:**
-
-- Применено 300 правок, суммарно использовано 14,950,000 токенов.
-- Лимит бюджета: ~15,000,000 токенов.
-
-**Приближение к лимиту:**
-
-1. Агент отправляет правку с 30,000 токенов (большая правка — добавление целого раздела).
-2. Text Service A обрабатывает правку:
-    - Проверяет бюджет: `14,950,000 + 30,000 = 14,980,000` (в пределах лимита).
-    - Применяет правку, создаёт версию 301.
-    - Обновляет счётчик: `total_tokens = 14,980,000`.
-3. Ещё 4 агента отправляют правки по 5,000 токенов каждая.
-4. Text Service обрабатывает их последовательно:
-    - Правка 1: `14,980,000 + 5,000 = 14,985,000` ✓
-    - Правка 2: `14,985,000 + 5,000 = 14,990,000` ✓
-    - Правка 3: `14,990,000 + 5,000 = 14,995,000` ✓
-    - Правка 4: `14,995,000 + 5,000 = 15,000,000` ✓ (ровно на лимите)
-5. Версия документа теперь 305, использовано ровно 15,000,000 токенов.
-
-**Превышение лимита:**
-
-6. Следующий агент отправляет правку с 500 токенов.
-7. Text Service A обрабатывает запрос:
-    - Начинает транзакцию.
-    - Выполняет проверку бюджета:
-      ```sql
-      SELECT total_tokens, limit_tokens FROM token_budget WHERE id = 1 FOR UPDATE;
-      -- Возвращает: total_tokens = 15000000, limit_tokens = 15000000
-      ```
-    - Вычисляет: `15,000,000 + 500 = 15,000,500 > 15,000,000` ❌
-    - **Бюджет превышен!**
-    - Выполняет `ROLLBACK;` (откатывает транзакцию, правка НЕ применяется).
-8. Text Service A возвращает агенту:
-   ```
-   429 Too Many Requests
-   Content-Type: application/json
-   
-   {
-     "error": "Token budget exceeded",
-     "used": 15000000,
-     "limit": 15000000,
-     "requested": 500,
-     "message": "Cannot accept more edits. Budget limit reached."
-   }
-   ```
-9. Text Service A отправляет событие в Analytics:
-   ```json
-   {
-     "event_type": "budget_exceeded",
-     "timestamp": "2024-11-10T15:00:00Z",
-     "metadata": {
-       "total_tokens": 15000000,
-       "limit": 15000000,
-       "rejected_tokens": 500,
-       "agent_id": "agent-style-005"
-     }
-   }
-   ```
-
-**Остановка агентов:**
-
-10. Агент получает 429, логирует сообщение:
-    ```
-    WARN: Token budget exceeded. Stopping agent. Used: 15,000,000 / 15,000,000
-    ```
-11. Агент завершает цикл работы и останавливается (exit code 0).
-12. Все последующие агенты также получают 429 при попытке отправить правки.
-13. В течение 1-2 минут все 10 агентов останавливаются.
-
-**Уведомление пользователя:**
-
-14. Frontend периодически запрашивает метрики: `GET /api/analytics/metrics?period=1h`.
-15. Analytics Service возвращает данные, включая событие `budget_exceeded`:
-    ```json
-    {
-      "total_edits": 305,
-      "total_tokens": 15000000,
-      "active_agents": 0,
-      "budget_status": "exceeded",
-      "last_edit_timestamp": "2024-11-10T14:59:45Z"
-    }
-    ```
-16. Frontend обнаруживает `budget_status: "exceeded"` и отображает уведомление:
-    ```
-    ⚠️ Бюджет токенов исчерпан
-    
-    Работа агентов остановлена.
-    Использовано: 15,000,000 токенов (~15,000 ₽)
-    Финальная версия документа: 305
-    
-    [Кнопка: Скачать документ]
-    ```
-17. Пользователь может просмотреть финальный документ, экспортировать его в .txt файл, изучить статистику и историю
-    правок.
+1. Система работает, применено 300 правок, использовано 14,950,000 токенов.
+2. Агенты продолжают отправлять правки, счётчик токенов приближается к лимиту 15,000,000.
+3. Применяются последние правки, счётчик достигает ровно 15,000,000 токенов (версия 305).
+4. Следующий агент отправляет правку с 500 токенами.
+5. Text Service проверяет бюджет в транзакции: 15,000,000 + 500 > 15,000,000.
+6. Text Service откатывает транзакцию и возвращает 429 с сообщением об исчерпании бюджета.
+7. Text Service отправляет событие `budget_exceeded` в Analytics.
+8. Агент получает 429, логирует сообщение и завершает работу.
+9. Все последующие агенты получают 429 и останавливаются.
+10. Frontend периодически запрашивает метрики, обнаруживает статус `budget_exceeded`.
+11. Frontend отображает уведомление пользователю о завершении работы и предлагает скачать финальный документ.
 
 ### Сценарий 7: Просмотр прогресса пользователем (Frontend)
 
-**Просмотр документа:**
+1. Пользователь открывает страницу просмотра документа.
+2. Frontend периодически (каждые 2 секунды) запрашивает `GET /api/document/current`.
+3. Получает текущую версию документа и отображает текст.
+4. При обнаружении новой версии вычисляет diff и подсвечивает изменения.
+5. Пользователь переходит на вкладку "История правок".
+6. Frontend запрашивает `GET /api/edits?limit=50&offset=0`.
+7. Получает список правок и отображает в таблице с пагинацией.
+8. Пользователь переходит на вкладку "Чат агентов".
+9. Frontend периодически (каждые 3 секунды) запрашивает `GET /api/chat/messages?since=<timestamp>`.
+10. Получает новые сообщения и отображает в виде ленты с автопрокруткой.
+11. Пользователь переходит на вкладку "Аналитика".
+12. Frontend запрашивает `GET /api/analytics/metrics?period=1h`.
+13. Получает агрегированные метрики (количество правок, токенов, активных агентов, графики).
+14. Отображает дашборд с интерактивными графиками (Recharts).
 
-1. Пользователь открывает страницу `http://localhost:3000/document`.
-2. Frontend компонент React выполняет начальную загрузку данных при монтировании (useEffect):
-   ```javascript
-   useEffect(() => {
-     fetchDocument();
-     const interval = setInterval(fetchDocument, 2000); // Polling каждые 2 секунды
-     return () => clearInterval(interval);
-   }, []);
-   
-   const fetchDocument = async () => {
-     const response = await fetch('http://localhost/api/document/current');
-     const data = await response.json();
-     setDocument(data);
-   };
-   ```
-3. Frontend отправляет: `GET http://localhost/api/document/current`.
-4. Load Balancer перенаправляет запрос на Text Service C.
-5. Text Service C возвращает:
-   ```json
-   {
-     "version": 87,
-     "text": "[текст документа 15000 символов]",
-     "timestamp": "2024-11-10T15:45:32Z"
-   }
-   ```
-6. Frontend отображает текст в компоненте `<pre>` или `<div>` с форматированием.
-7. Через 2 секунды Frontend повторяет запрос.
-8. Text Service возвращает версию 88 (за 2 секунды была применена новая правка).
-9. Frontend обнаруживает изменение версии (`87 !== 88`).
-10. Frontend вычисляет diff между старым и новым текстом с помощью библиотеки (например, `diff` npm package).
-11. Frontend подсвечивает изменённый фрагмент жёлтым цветом (`<span style="background: yellow;">`) на 5 секунд, затем
-    убирает подсветку.
+---
 
-**Просмотр истории правок:**
+## Архитектура системы
 
-12. Пользователь переходит на вкладку "История правок" (`/edits`).
-13. Frontend отправляет: `GET http://localhost/api/edits?limit=50&offset=0`.
-14. Text Service возвращает:
-    ```json
-    [
-      {
-        "edit_id": "edit-1234",
-        "agent_id": "agent-physics-001",
-        "status": "accepted",
-        "proposed_text": "Суперпозиция позволяет кубиту находиться одновременно...",
-        "position": "after_paragraph_2",
-        "timestamp": "2024-11-10T15:44:12Z",
-        "tokens_used": 450
-      },
-      {
-        "edit_id": "edit-1235",
-        "agent_id": "agent-style-002",
-        "status": "accepted",
-        "proposed_text": "Квантовая запутанность является другим фундаментальным явлением...",
-        "position": "after_paragraph_5",
-        "timestamp": "2024-11-10T15:44:25Z",
-        "tokens_used": 380
-      },
-      ... (ещё 48 правок)
-    ]
-    ```
-15. Frontend отображает таблицу с колонками:
-    | ID правки | Агент | Статус | Фрагмент текста | Позиция | Время | Токены |
-    |-----------|-------|--------|-----------------|---------|-------|--------|
-    | edit-1234 | agent-physics-001 | ✓ Принята | Суперпозиция позволяет... | after_paragraph_2 | 15:44:12 | 450 |
-    | edit-1235 | agent-style-002 | ✓ Принята | Квантовая запутанность... | after_paragraph_5 | 15:44:25 | 380 |
-    | ... | ... | ... | ... | ... | ... | ... |
-16. Пользователь может кликнуть "Загрузить ещё", что отправит `GET /api/edits?limit=50&offset=50` для следующей
-    страницы.
+### Основные компоненты
 
-**Просмотр чата агентов:**
+1. **AI Agent (JavaScript, Node.js 20, Docker)**
+    - Stateless микросервис, реализующий цикл работы агента.
+    - Получает конфигурацию через переменные окружения: `AGENT_ROLE`, `API_TOKEN`, `TEXT_SERVICE_URL`,
+      `CHAT_SERVICE_URL`, `OPENAI_API_KEY`.
+    - Циклически выполняет: запрос документа, генерация правки через OpenAI API, отправка правки, публикация сообщения в
+      чат, ожидание 1 секунду.
+    - Обрабатывает ошибки с retry логикой (экспоненциальный backoff до 5 попыток).
+    - При получении 429 (превышение бюджета) завершает работу.
 
-17. Пользователь переходит на вкладку "Чат агентов" (`/chat`).
-18. Frontend отправляет начальный запрос: `GET http://localhost/api/chat/messages?limit=50`.
-19. Chat Service возвращает последние 50 сообщений из Redis Stream:
-    ```json
-    [
-      {
-        "agent_id": "agent-physics-001",
-        "message": "Добавил раздел о суперпозиции (правка #edit-1234)",
-        "timestamp": "2024-11-10T15:44:15Z"
-      },
-      {
-        "agent_id": "agent-style-002",
-        "message": "Исправил стилистику введения",
-        "timestamp": "2024-11-10T15:44:20Z"
-      },
-      {
-        "agent_id": "agent-facts-003",
-        "message": "Проверил факты в разделе об истории — всё корректно",
-        "timestamp": "2024-11-10T15:44:30Z"
-      },
-      ... (ещё 47 сообщений)
-    ]
-    ```
-20. Frontend отображает ленту сообщений:
-    ```
-    [15:44:15] agent-physics-001: Добавил раздел о суперпозиции (правка #edit-1234)
-    [15:44:20] agent-style-002: Исправил стилистику введения
-    [15:44:30] agent-facts-003: Проверил факты в разделе об истории — всё корректно
-    ...
-    ```
-21. Frontend запускает polling (каждые 3 секунды):
-    ```javascript
-    const fetchMessages = async () => {
-      const lastTimestamp = messages[messages.length - 1]?.timestamp || '1970-01-01T00:00:00Z';
-      const response = await fetch(`http://localhost/api/chat/messages?since=${lastTimestamp}&limit=10`);
-      const newMessages = await response.json();
-      if (newMessages.length > 0) {
-        setMessages(prev => [...prev, ...newMessages]);
-        scrollToBottom(); // Автопрокрутка к последнему сообщению
+2. **Text Service (Python 3.11, FastAPI, SQLAlchemy, asyncio, Docker)**
+    - Stateful распределённый сервис, три независимых узла (Москва, Санкт-Петербург, Новосибирск).
+    - Каждый узел имеет собственную базу данных PostgreSQL.
+    - **Endpoints:**
+        - `GET /api/document/current` — возвращает последнюю версию документа.
+        - `POST /api/document/init` — создаёт новый документ с начальным текстом.
+        - `POST /api/edits` — принимает правку, проверяет бюджет, применяет в транзакции, инициирует репликацию.
+        - `GET /api/edits?limit=N&offset=M` — возвращает список правок с пагинацией.
+        - `POST /api/replication/sync` — принимает репликационное сообщение от другого узла, применяет изменение.
+        - `GET /api/replication/catch-up?since_version=N` — возвращает все версии начиная с N+1 для восстановления
+          отстающего узла.
+        - `GET /health` — health check для Load Balancer.
+    - **Логика репликации:** после применения правки асинхронно отправляет `POST /api/replication/sync` двум другим
+      узлам с использованием aiohttp.
+    - **Разрешение конфликтов:** last-write-wins по полю `timestamp`.
+    - **Отправка событий:** после каждой успешной операции отправляет событие в Analytics Service через
+      `POST /api/analytics/events`.
+
+3. **Text Service DB (PostgreSQL 15)**
+    - Отдельная база данных для каждого узла Text Service (три независимые инстанции).
+    - **Таблицы:**
+        - `documents` — версии документа (version INT PRIMARY KEY, text TEXT, timestamp TIMESTAMPTZ, edit_id UUID).
+        - `edits` — все правки (edit_id UUID PRIMARY KEY, agent_id VARCHAR, proposed_text TEXT, position VARCHAR,
+          tokens_used INT, status VARCHAR, created_at TIMESTAMPTZ).
+        - `token_budget` — счётчик токенов (id INT PRIMARY KEY DEFAULT 1, total_tokens BIGINT, limit_tokens BIGINT
+          DEFAULT 15000000).
+    - **Индексы:**
+        - `idx_documents_version` на `documents(version DESC)` — быстрое получение последней версии.
+        - `idx_edits_status` на `edits(status)` — фильтрация принятых правок при подсчёте токенов.
+
+4. **Chat Service (Python 3.11, FastAPI, Redis, Docker)**
+    - Stateless сервис для обмена сообщениями между агентами.
+    - **Endpoints:**
+        - `POST /api/chat/messages` — принимает сообщение, сохраняет в Redis Stream, возвращает message_id и timestamp.
+        - `GET /api/chat/messages?since=<timestamp>&limit=<number>` — возвращает сообщения из Redis Stream, фильтруя по
+          timestamp.
+    - **Redis команды:**
+        - `XADD chat:messages MAXLEN ~ 1000 * agent_id <id> message <text> timestamp <ts>` — добавление сообщения с
+          автоудалением старых (хранит последние 1000).
+        - `XRANGE chat:messages <start_id> + COUNT <limit>` — чтение сообщений.
+
+5. **Chat Service Storage (Redis 7)**
+    - Единственная инстанция Redis для всей системы (не распределённая).
+    - Хранит последние 1000 сообщений в Stream `chat:messages`.
+    - Настройки персистентности: AOF (Append-Only File) с `fsync` каждую секунду.
+
+6. **Analytics Service (Python 3.11, FastAPI, SQLAlchemy, Docker)**
+    - Stateless сервис для сбора и агрегации метрик.
+    - **Endpoints:**
+        - `POST /api/analytics/events` — принимает событие от Text Service, сохраняет в PostgreSQL.
+        - `GET /api/analytics/metrics?period=<1h|24h|7d>` — выполняет агрегирующие запросы и возвращает метрики.
+    - **Типы событий:**
+        - `edit_applied` — правка применена (agent_id, version, tokens, timestamp).
+        - `replication_success` — успешная репликация (source_node, target_node, version, latency_ms).
+        - `replication_failed` — ошибка репликации (source_node, target_node, error_message).
+        - `budget_exceeded` — превышение бюджета токенов.
+        - `node_recovered` — восстановление узла после отказа.
+
+7. **Analytics Service DB (PostgreSQL 15)**
+    - Единая база данных для Analytics Service.
+    - **Таблица:**
+        - `events` — все события (id BIGSERIAL PRIMARY KEY, event_type VARCHAR, agent_id VARCHAR, version INT, tokens
+          INT, timestamp TIMESTAMPTZ, metadata JSONB).
+    - **Индексы:**
+        - `idx_events_timestamp` на `events(timestamp DESC)` — фильтрация по времени.
+        - `idx_events_type` на `events(event_type)` — фильтрация по типу события.
+
+8. **Load Balancer (Nginx, Docker)**
+    - Распределяет входящие HTTP-запросы между тремя узлами Text Service по алгоритму round-robin.
+    - Выполняет health checks: каждые 10 секунд отправляет `GET /health` к каждому узлу.
+    - Если узел не отвечает в течение 5 секунд или возвращает статус ≠ 200, исключает его из пула на 60 секунд.
+    - **Конфигурация Nginx:**
+      ```nginx
+      upstream text_service {
+        server text-service-a:8000 max_fails=3 fail_timeout=60s;
+        server text-service-b:8000 max_fails=3 fail_timeout=60s;
+        server text-service-c:8000 max_fails=3 fail_timeout=60s;
       }
-    };
-    ```
+      server {
+        listen 80;
+        location /api/ {
+          proxy_pass http://text_service;
+          proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+        }
+      }
+      ```
+    - Также маршрутизирует запросы к Chat Service и Analytics Service (прямое проксирование).
 
-**Просмотр аналитики:**
+9. **Frontend (Next.js 15, React 18, TypeScript, TailwindCSS, Recharts, Docker)**
+    - Stateless веб-приложение, работает в контейнере Docker на порту 3000.
+    - **Страницы:**
+        - `/` — главная страница с формой инициализации документа.
+        - `/document` — просмотр текущего документа с автообновлением каждые 2 секунды.
+        - `/edits` — таблица истории правок с пагинацией.
+        - `/chat` — лента сообщений агентов с автообновлением каждые 3 секунды.
+        - `/analytics` — дашборд с графиками метрик (Recharts).
+    - **Взаимодействие с Backend:** все запросы через Load Balancer `http://load-balancer/api/...` с использованием
+      `fetch` API.
+    - **Стилизация:** TailwindCSS для адаптивного дизайна, поддержка тёмной темы.
 
-22. Пользователь переходит на вкладку "Аналитика" (`/analytics`).
-23. Frontend отправляет: `GET http://localhost/api/analytics/metrics?period=1h`.
-24. Analytics Service выполняет агрегирующие запросы в PostgreSQL:
-    ```sql
-    -- Общее количество правок за последний час
-    SELECT COUNT(*) FROM events
-    WHERE event_type = 'edit_applied'
-      AND timestamp > NOW() - INTERVAL '1 hour';
-    -- Возвращает: 87
-    
-    -- Суммарное количество токенов за последний час
-    SELECT SUM(tokens) FROM events
-    WHERE event_type = 'edit_applied'
-      AND timestamp > NOW() - INTERVAL '1 hour';
-    -- Возвращает: 42500
-    
-    -- Количество уникальных активных агентов за последние 5 минут
-    SELECT COUNT(DISTINCT agent_id) FROM events
-    WHERE timestamp > NOW() - INTERVAL '5 minutes';
-    -- Возвращает: 8
-    
-    -- Средняя латентность репликации
-    SELECT AVG((metadata->>'latency_ms')::int) FROM events
-    WHERE event_type = 'replication_success'
-      AND timestamp > NOW() - INTERVAL '1 hour';
-    -- Возвращает: 320
-    
-    -- Количество правок в минуту (time-series для графика)
-    SELECT
-      date_trunc('minute', timestamp) AS bucket,
-      COUNT(*) AS edits_count
-    FROM events
-    WHERE event_type = 'edit_applied'
-      AND timestamp > NOW() - INTERVAL '1 hour'
-    GROUP BY bucket
-    ORDER BY bucket ASC;
-    -- Возвращает 60 строк (по одной на каждую минуту последнего часа)
-    
-    -- Потребление токенов во времени (time-series для графика)
-    SELECT
-      date_trunc('minute', timestamp) AS bucket,
-      SUM(tokens) AS tokens_sum
-    FROM events
-    WHERE event_type = 'edit_applied'
-      AND timestamp > NOW() - INTERVAL '1 hour'
-    GROUP BY bucket
-    ORDER BY bucket ASC;
-    -- Возвращает 60 строк
-    ```
-25. Analytics Service возвращает:
-    ```json
-    {
-      "total_edits": 87,
-      "total_tokens": 42500,
-      "active_agents": 8,
-      "avg_latency_ms": 320,
-      "edits_per_minute": 1.45,
-      "token_usage_by_time": [
-        {"timestamp": "2024-11-10T15:00:00Z", "tokens": 1200},
-        {"timestamp": "2024-11-10T15:01:00Z", "tokens": 1450},
-        {"timestamp": "2024-11-10T15:02:00Z", "tokens": 980},
-        ... (58 записей)
+10. **Desktop Application (C++ 17, Qt 6, Qt Network, Qt Charts)**
+    - Нативное кроссплатформенное приложение (Linux, Windows, macOS).
+    - Использует Qt Widgets для UI: QMainWindow с QTabWidget для пяти вкладок (Инициализация, Документ, Правки, Чат,
+      Аналитика).
+    - **Взаимодействие с Backend:** QNetworkAccessManager для HTTP-запросов к `http://load-balancer/api/...`, парсинг
+      JSON с помощью QJsonDocument.
+    - **Автообновление данных:** QTimer для периодических запросов (каждые 2-3 секунды).
+    - **Визуализация графиков:** Qt Charts (QLineSeries для графика токенов, QBarSeries для правок в минуту).
+    - **Сборка:** CMake, поддержка статической линковки Qt для упрощения дистрибуции.
+
+11. **CI/CD Pipeline (GitHub Actions)**
+    - **Workflow файл:** `.github/workflows/ci.yml`.
+    - **Триггеры:** push в ветку `main`, pull request в `main`.
+    - **Jobs:**
+        - `build` — сборка всех Docker-образов (AI Agent, Text Service, Chat Service, Analytics Service, Frontend) с
+          использованием Docker Buildx.
+        - `test-unit` — запуск модульных тестов для Python-сервисов (pytest) и JavaScript-агентов (jest).
+        - `test-integration` — развёртывание полной системы в Docker Compose, запуск 3 агентов с бюджетом 500 рублей,
+          проверка что документ изменился (версия > 1), проверка наличия событий в Analytics.
+        - `test-desktop` — сборка Desktop Application на трёх платформах (Linux, Windows, macOS) с использованием
+          матрицы GitHub Actions.
+    - **Артефакты:** сохранение логов тестов, Docker-образов и бинарных файлов Desktop Application.
+
+### Архитектурная диаграмма
+
+```mermaid
+graph TB
+    subgraph Clients
+        Web[Frontend<br/>Next.js 15]
+        Desktop[Desktop App<br/>C++ Qt 6]
+    end
+
+    subgraph Gateway
+        LB[Load Balancer<br/>Nginx]
+    end
+
+    subgraph Agents
+        Agent1[AI Agent 1<br/>JavaScript]
+        Agent2[AI Agent 2<br/>JavaScript]
+        AgentN[AI Agent N<br/>JavaScript]
+    end
+
+    subgraph Text_Service
+        TextA[Text Service A<br/>Moscow<br/>Python + FastAPI]
+        TextB[Text Service B<br/>Saint Petersburg<br/>Python + FastAPI]
+        TextC[Text Service C<br/>Novosibirsk<br/>Python + FastAPI]
+    end
+
+    subgraph Text_DBs
+        DBA[(PostgreSQL A)]
+        DBB[(PostgreSQL B)]
+        DBC[(PostgreSQL C)]
+    end
+
+    subgraph Services
+        Chat[Chat Service<br/>Python + FastAPI]
+        Analytics[Analytics Service<br/>Python + FastAPI]
+    end
+
+    subgraph Storage
+        Redis[(Redis 7<br/>Streams)]
+        AnalyticsDB[(PostgreSQL<br/>Analytics)]
+    end
+
+    subgraph External
+        OpenAI[OpenAI API<br/>GPT-4 Turbo]
+    end
+
+    Web -->|HTTP| LB
+    Desktop -->|HTTP| LB
+    Agent1 -->|HTTP| LB
+    Agent2 -->|HTTP| LB
+    AgentN -->|HTTP| LB
+    LB -->|Round - robin| TextA
+    LB -->|Round - robin| TextB
+    LB -->|Round - robin| TextC
+    LB -->|Proxy| Chat
+    LB -->|Proxy| Analytics
+    TextA <-->|POST /api/replication/sync<br/>GET /api/replication/catch - up| TextB
+    TextB <-->|POST /api/replication/sync<br/>GET /api/replication/catch - up| TextC
+    TextC <-->|POST /api/replication/sync<br/>GET /api/replication/catch - up| TextA
+    TextA -->|Transactions| DBA
+    TextB -->|Transactions| DBB
+    TextC -->|Transactions| DBC
+    Agent1 -->|POST /api/chat/messages<br/>GET /api/chat/messages| Chat
+    Agent2 -->|POST /api/chat/messages<br/>GET /api/chat/messages| Chat
+    AgentN -->|POST /api/chat/messages<br/>GET /api/chat/messages| Chat
+    Chat -->|XADD/XRANGE| Redis
+    Agent1 -->|HTTPS| OpenAI
+    Agent2 -->|HTTPS| OpenAI
+    AgentN -->|HTTPS| OpenAI
+    TextA -->|POST /api/analytics/events| Analytics
+    TextB -->|POST /api/analytics/events| Analytics
+    TextC -->|POST /api/analytics/events| Analytics
+    Analytics -->|Aggregations| AnalyticsDB
+```
+
+### Взаимодействия и интерфейсы
+
+- **AI Agent ↔ Text Service:** REST/HTTP для получения документа, отправки правок.
+- **AI Agent ↔ Chat Service:** REST/HTTP для публикации и чтения сообщений.
+- **AI Agent ↔ OpenAI API:** HTTPS для генерации правок.
+- **Text Service ↔ Text Service:** REST/HTTP для репликации изменений между узлами.
+- **Text Service ↔ Analytics Service:** REST/HTTP для отправки событий.
+- **Frontend/Desktop ↔ Load Balancer:** REST/HTTP для всех операций.
+- **Load Balancer ↔ Text/Chat/Analytics:** HTTP health checks, маршрутизация запросов.
+
+---
+
+## Технические сценарии
+
+### Сценарий 1: Получение документа агентом
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant LB as Load Balancer
+    participant Text as Text Service A
+    participant DB as PostgreSQL A
+    participant OpenAI as OpenAI API
+    Agent ->> LB: GET /api/document/current
+    LB ->> Text: Forward request
+    Text ->> DB: SELECT latest version
+    DB -->> Text: {version: 42, text: "..."}
+    Text -->> LB: 200 OK
+    LB -->> Agent: Document received
+    Agent ->> OpenAI: POST /v1/chat/completions
+    OpenAI -->> Agent: Generated edit proposal
+```
+
+### Сценарий 2: Применение правки и репликация
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI Agent
+    participant Text as Text Service A
+    participant DBA as PostgreSQL A
+    participant TextB as Text Service B
+    participant TextC as Text Service C
+    participant Analytics as Analytics Service
+    Agent ->> Text: POST /api/edits
+    Text ->> DBA: BEGIN TRANSACTION
+    Text ->> DBA: Check budget
+    DBA -->> Text: Within limit
+    Text ->> DBA: INSERT edit, UPDATE document, UPDATE budget
+    Text ->> DBA: COMMIT
+    Text ->> TextB: POST /api/replication/sync (async)
+    Text ->> TextC: POST /api/replication/sync (async)
+    TextB -->> Text: 200 OK synced
+    TextC -->> Text: 200 OK synced
+    Text ->> Analytics: POST /api/analytics/events
+    Analytics -->> Text: 200 OK
+    Text -->> Agent: 201 Created {edit_id, status, version}
+```
+
+### Сценарий 3: Восстановление после отказа узла
+
+```mermaid
+sequenceDiagram
+    participant TextB as Text Service B
+    participant TextA as Text Service A
+    participant DBB as PostgreSQL B
+    Note over TextB: Node B crashed and recovered
+    TextB ->> TextB: Check local version: 42
+    TextB ->> TextA: GET /api/document/current
+    TextA -->> TextB: {version: 50}
+    Note over TextB: Detected lag: 50 - 42 = 8 versions
+    TextB ->> TextA: GET /api/replication/catch-up?since_version=42
+    TextA -->> TextB: {versions: [43, 44, ..., 50]}
+
+    loop For each version 43-50
+        TextB ->> DBB: BEGIN TRANSACTION
+        TextB ->> DBB: INSERT version
+        TextB ->> DBB: COMMIT
+    end
+
+    Note over TextB, TextA: Node B synchronized
+```
+
+### Сценарий 4: Координация агентов через Chat Service
+
+```mermaid
+sequenceDiagram
+    participant Agent1 as AI Agent 1
+    participant Agent2 as AI Agent 2
+    participant Chat as Chat Service
+    participant Redis as Redis 7
+    Agent1 ->> Chat: POST /api/chat/messages<br/>"Working on section X"
+    Chat ->> Redis: XADD chat:messages MAXLEN ~ 1000
+    Redis -->> Chat: Message ID
+    Chat -->> Agent1: 200 OK {message_id, timestamp}
+    Note over Agent2: Periodic check for new messages
+    Agent2 ->> Chat: GET /api/chat/messages?since=<timestamp>
+    Chat ->> Redis: XRANGE chat:messages
+    Redis -->> Chat: Recent messages
+    Chat -->> Agent2: [{agent: "Agent1", message: "Working on section X"}]
+    Note over Agent2: Agent2 avoids duplicating work
+```
+
+### Сценарий 5: Просмотр аналитики пользователем
+
+```mermaid
+sequenceDiagram
+    participant User as User (Frontend)
+    participant LB as Load Balancer
+    participant Analytics as Analytics Service
+    participant DB as PostgreSQL Analytics
+    User ->> LB: GET /api/analytics/metrics?period=1h
+    LB ->> Analytics: Forward request
+    Analytics ->> DB: Aggregate queries:<br/>COUNT edits, SUM tokens, COUNT agents
+    DB -->> Analytics: Aggregated data
+    Analytics ->> DB: Time-series query:<br/>token usage by minute
+    DB -->> Analytics: Time-series data
+    Analytics -->> LB: 200 OK {total_edits, total_tokens, charts}
+    LB -->> User: Metrics data
+    Note over User: Frontend renders interactive charts
+```
+
+---
+
+## План разработки и тестирования
+
+### Этап 1: MVP (4 недели, 28 октября - 22 ноября)
+
+**Состав:**
+
+- 1 узел Text Service с PostgreSQL (без репликации).
+- 5-10 AI-агентов с различными ролями.
+- Chat Service с Redis.
+- Analytics Service с PostgreSQL.
+- Frontend (Next.js) с базовым функционалом.
+- CI/CD для автоматической сборки и тестирования.
+
+**План разработки:**
+
+| Неделя | Период          | Задачи                                                                                                                                                                                                                      | Ответственный       |
+|--------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------|
+| 1      | 28 окт - 3 ноя  | Проектирование REST API (Text, Chat, Analytics). Настройка Docker Compose, GitHub Actions. Создание структуры репозитория, Dockerfile для всех сервисов.                                                                    | Виталий (Team Lead) |
+| 2      | 4 ноя - 10 ноя  | Реализация Text Service: API для документа и правок, интеграция с PostgreSQL, версионность, контроль бюджета токенов. Реализация AI Agent: цикл работы, интеграция с OpenAI API, обработка инструкций.                      | Иван (Backend)      |
+| 3      | 11 ноя - 17 ноя | Реализация Chat Service: API для сообщений, интеграция с Redis Streams. Реализация Analytics Service: приём событий, базовая схема БД. Реализация Frontend: страницы создания документа, просмотра, чата, счётчика токенов. | Полина (Frontend)   |
+| 4      | 18 ноя - 22 ноя | Интеграция компонентов, end-to-end тестирование. Настройка CI/CD: сборка, запуск тестов с бюджетом 500 рублей. Написание документации (README, API docs).                                                                   | Виктория (QA)       |
+
+**План тестирования:**
+
+| Тип теста            | Описание                                                                                                                                                                                            | Ответственный  |
+|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|
+| Модульные тесты      | Text Service (применение правок, версионность, контроль токенов). AI Agent (генерация запросов, обработка ответов). Chat Service (публикация/чтение сообщений). Analytics Service (запись событий). | Иван, Виктория |
+| Интеграционные тесты | Полный цикл: агент → Text Service → Chat Service → Analytics Service. Проверка версионности при конкурентных правках (2-3 агента). Проверка блокировки правок при исчерпании бюджета.               | Виктория       |
+| Frontend тесты       | Проверка отображения данных из API. UI тесты компонентов (jest, react-testing-library).                                                                                                             | Полина         |
+| CI/CD тесты          | Автоматический запуск системы в контейнерах. Создание тестового документа, запуск 3 агентов, проверка изменения документа. Бюджет: 500 рублей (~500,000 токенов).                                   | Виталий        |
+
+**Definition of Done (DoD):**
+
+- ✅ Все компоненты реализованы и задокументированы (README, API docs).
+- ✅ Система успешно проходит интеграционные тесты в CI/CD.
+- ✅ Frontend позволяет создать документ, запустить агентов, наблюдать за работой.
+- ✅ Агенты генерируют и применяют правки, чат работает, аналитика отображает базовые метрики.
+- ✅ Контроль бюджета токенов функционирует корректно.
+- ✅ Покрытие тестами ≥ 60%.
+
+---
+
+### Этап 2: Расширенная функциональность (3 недели, 25 ноября - 13 декабря)
+
+**Состав:**
+
+- 3 узла Text Service с репликацией.
+- Desktop Application (C++ Qt).
+- Load Balancer (Nginx).
+- Расширенная аналитика (графики в реальном времени).
+
+**План разработки:**
+
+| Неделя | Период         | Задачи                                                                                                                                                                                                                           | Ответственный                         |
+|--------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|
+| 5      | 25 ноя - 1 дек | Реализация репликации Text Service: API `/api/replication/sync` и `/api/replication/catch-up`, логика разрешения конфликтов по timestamp. Настройка 3 узлов в Docker Compose.                                                    | Иван (Backend)                        |
+| 6      | 2 дек - 8 дек  | Реализация Load Balancer (Nginx): health checks, маршрутизация. Тесты репликации: синхронизация между 3 узлами, тесты восстановления узла после отказа.                                                                          | Виталий (Team Lead), Виктория (QA)    |
+| 7      | 9 дек - 13 дек | Разработка Desktop Application (C++ Qt): GUI для всех функций Frontend, HTTP клиент (Qt Network), визуализация графиков (Qt Charts). Расширение Analytics Service: графики в реальном времени, интеграция в Frontend (Recharts). | Виктория (Desktop), Полина (Frontend) |
+
+**План тестирования:**
+
+| Тип теста                 | Описание                                                                                                                                                                        | Ответственный     |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| Тесты репликации          | Проверка синхронизации документа между 3 узлами. Тесты с конкурентными правками на разных узлах. Проверка eventual consistency (≤ 3 сек). Тесты восстановления узла (catch-up). | Виктория          |
+| Тесты отказоустойчивости  | Симуляция отказа 1 из 3 узлов (docker stop). Проверка продолжения работы системы. Проверка восстановления узла без потери данных.                                               | Виктория, Иван    |
+| Тесты Desktop Application | Функциональное тестирование GUI. Интеграционные тесты взаимодействия с API. Кроссплатформенное тестирование (Linux, Windows).                                                   | Виктория          |
+| Нагрузочные тесты         | Запуск 50 агентов, проверка обработки ≥ 200 правок. Проверка throughput, latency. Бюджет: 2000 рублей.                                                                          | Виктория, Виталий |
+
+**Definition of Done (DoD):**
+
+- ✅ Репликация работает корректно, eventual consistency достигается за ≤ 3 секунд.
+- ✅ Load Balancer корректно распределяет нагрузку и обрабатывает отказы узлов.
+- ✅ Desktop Application реализовано, собирается и работает на Linux и Windows.
+- ✅ Расширенная аналитика доступна в Frontend (графики в реальном времени).
+- ✅ Система успешно проходит тесты отказоустойчивости и нагрузочные тесты.
+- ✅ Документация обновлена (ARCHITECTURE.md, описание репликации).
+
+---
+
+### Этап 3: Финальное тестирование (1 неделя, 16 декабря - 20 декабря)
+
+**Состав:**
+
+- Полная система со всеми компонентами.
+- Финальный стресс-тест: 50 агентов, бюджет 10,000 рублей.
+- Подготовка демонстрационных материалов.
+
+**План разработки:**
+
+| День | Дата      | Задачи                                                                                                                                            | Ответственный     |
+|------|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
+| 1    | 16 дек    | Оптимизация производительности (profiling, устранение bottleneck'ов). Финальная проверка всех компонентов.                                        | Все               |
+| 2-3  | 17-18 дек | Запуск финального стресс-теста: 50 агентов, тема "История искусственного интеллекта", бюджет 10,000 рублей. Мониторинг метрик в реальном времени. | Виктория, Виталий |
+| 4    | 19 дек    | Сбор и анализ результатов теста. Подготовка презентации: описание архитектуры, демонстрация работы, графики метрик.                               | Все               |
+| 5    | 20 дек    | Финальная проверка документации. Репетиция демонстрации. **Финальное демо.**                                                                      | Все               |
+
+**План тестирования:**
+
+| Тест                     | Описание                                                                               | Критерии успеха                                                        |
+|--------------------------|----------------------------------------------------------------------------------------|------------------------------------------------------------------------|
+| Финальный стресс-тест    | Запуск 50 агентов с бюджетом 10,000 рублей. Тема: "История искусственного интеллекта". | Обработано ≥ 500 правок. Система стабильна. Все узлы синхронизированы. |
+| Симуляция отказов        | Случайное отключение узла во время работы.                                             | Система продолжает работу. Узел восстанавливается автоматически.       |
+| Проверка консистентности | Сравнение финального документа на всех 3 узлах.                                        | Документы идентичны (побайтовое сравнение).                            |
+| Проверка liveness        | Правки обрабатываются до исчерпания бюджета.                                           | Все агенты работают до получения 429. Нет deadlock'ов.                 |
+| Проверка safety          | Отсутствие потерянных правок.                                                          | Количество правок в БД = количество событий в Analytics.               |
+
+**Definition of Done (DoD):**
+
+- ✅ Финальный стресс-тест завершён успешно, обработано ≥ 500 правок.
+- ✅ Все метрики собраны и визуализированы (графики в презентации).
+- ✅ Презентация и видео-демонстрация подготовлены.
+- ✅ Документация полная и актуальная (README, ARCHITECTURE.md, API.md, TESTING.md).
+- ✅ Код проекта выложен в публичный GitHub репозиторий с CI/CD badges.
+- ✅ Проект готов к финальному демо 20 декабря 2024.
+
+---
+
+## Соответствие теоретическим основам распределённых систем
+
+| Концепция        | Реализация в проекте                                                                                                                                                                                                                                                                                                   |
+|------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Concurrency**  | Множество AI-агентов одновременно генерируют правки. Text Service обрабатывает конкурентные запросы с использованием транзакций PostgreSQL (уровень изоляции READ COMMITTED) и блокировок на уровне строк документа (FOR UPDATE).                                                                                      |
+| **Safety**       | Принятые правки не теряются благодаря репликации на три узла и транзакционности внутри каждого узла. Документ не переходит в некорректное состояние благодаря проверкам конфликтов перед применением правок.                                                                                                           |
+| **Liveness**     | Правки обрабатываются в конечном счёте даже при отказе одного узла благодаря перенаправлению запросов Load Balancer'ом и retry логике агентов. Система не зависает при отказе узла благодаря механизму восстановления (catch-up).                                                                                      |
+| **Partitioning** | Партиционирование работы по ролям агентов: разные агенты специализируются на разных аспектах документа (эксперты по темам, корректоры стиля, проверяющие факты), что уменьшает вероятность конфликтов при редактировании.                                                                                              |
+| **Replication**  | Репликация документа между тремя географически распределёнными узлами Text Service (Москва, Санкт-Петербург, Новосибирск). Использование eventual consistency с разрешением конфликтов по timestamp (last-write-wins). Восстановление отстающих узлов через механизм catch-up.                                         |
+| **CAP Theorem**  | Система выбирает Availability и Partition Tolerance (AP модель). При сетевом разделении (partition) система продолжает принимать запросы на доступных узлах, жертвуя консистентностью (eventual consistency вместо strong consistency). В нормальном режиме система достигает eventual consistency в течение 3 секунд. |
+
+---
+
+## Технологический стек
+
+| Компонент             | Технологии                                                                              |
+|-----------------------|-----------------------------------------------------------------------------------------|
+| **AI Agent**          | JavaScript (ES2024), Node.js 20, axios, openai npm package                              |
+| **Text Service**      | Python 3.11, FastAPI, SQLAlchemy, asyncio, aiohttp, PostgreSQL 15                       |
+| **Chat Service**      | Python 3.11, FastAPI, redis-py, Redis 7 (Streams)                                       |
+| **Analytics Service** | Python 3.11, FastAPI, SQLAlchemy, PostgreSQL 15                                         |
+| **Frontend**          | Next.js 15, React 18, TypeScript 5, TailwindCSS 3, Recharts 2                           |
+| **Desktop App**       | C++ 17, Qt 6.5, Qt Network, Qt Charts, CMake                                            |
+| **Load Balancer**     | Nginx 1.25                                                                              |
+| **Базы данных**       | PostgreSQL 15 (Text Service x3, Analytics), Redis 7 (Chat)                              |
+| **CI/CD**             | GitHub Actions, Docker 24, Docker Compose                                               |
+| **Тестирование**      | pytest (Python), jest (JavaScript), react-testing-library (Frontend), Qt Test (Desktop) |
+| **Мониторинг**        | Встроенная аналитика (Analytics Service), логирование в stdout (Docker logs)            |
