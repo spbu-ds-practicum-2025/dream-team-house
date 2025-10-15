@@ -496,6 +496,55 @@ graph TB
 4. Реплики Text Service синхронизируются между собой.
 5. Агенты начинают циклическую работу.
 
+```mermaid
+sequenceDiagram
+    participant FE as Frontend (Web) | Desktop App
+    participant TS1 as Text Service#1
+    participant TS2 as Text Service#2
+    participant DB as База данных
+    participant ORCH as Orchestrator (Docker)
+    participant AG1 as Agent A
+    participant AG2 as Agent B
+    participant AGN as Agent N
+    Note over FE, TS1: Сценарий 1: Инициализация работы (Backend)
+    FE ->> TS1: 1) POST /api/document/init (тема, начальный текст)
+    TS1 ->> DB: 2) Создать первую версию документа
+    DB -->> TS1: OK (documentId, v=1)
+
+    alt 3) TS инициирует запуск контейнеров
+        TS1 ->> ORCH: Запуск агентов (ENV: ROLE, TOKEN)
+    else 3) Автозапуск системой
+        ORCH -->> ORCH: Триггер по событию/правилу (ENV: ROLE, TOKEN)
+    end
+
+    par Параллельный старт агентов
+        ORCH ->> AG1: Старт с ролью и токеном
+        ORCH ->> AG2: Старт с ролью и токеном
+        ORCH ->> AGN: Старт с ролью и токеном
+    end
+
+    par 4) Синхронизация реплик Text Service
+        TS1 ->> TS2: Репликация/синхронизация состояния
+        TS2 ->> TS1: Репликация/синхронизация состояния
+    end
+
+    loop 5) Циклы работы агентов
+        par AG1 цикл
+            AG1 ->> TS1: Запрос/результаты
+            TS1 ->> DB: Чтение/запись версий
+            TS1 -->> AG1: Ответ/следующее задание
+        and AG2 цикл
+            AG2 ->> TS2: Запрос/результаты
+            TS2 ->> DB: Чтение/запись версий
+            TS2 -->> AG2: Ответ/следующее задание
+        and AGN цикл
+            AGN ->> TS1: Запрос/результаты
+            TS1 ->> DB: Чтение/запись версий
+            TS1 -->> AGN: Ответ/следующее задание
+        end
+    end
+```
+
 ### Сценарий 2: Цикл работы AI-агента
 
 1. Агент, запущенный с переменными окружения (роль, токен, URL сервисов, ключ ProxyAPI), запрашивает текущий документ:
@@ -609,6 +658,43 @@ sequenceDiagram
 5. Событие успешной репликации отправляется в Analytics Service.
 6. Процесс повторяется для узла C, обеспечивая eventual consistency всех узлов.
 
+<b>Данная схема может претерпеть изменения в зависимости от нашего опыта работы с репликациями (push/pull) и разрешением
+конфликтов!</b>
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Text Service (A)
+    participant B as Text Service (B)
+    participant C as Text Service (C)
+    participant AN as Analytics Service
+    Note over A, B: Сценарий 4: Репликация между узлами Text Service
+    A ->> B: 1) Репликационное сообщение: docId=X, v=N, payload
+    B ->> B: Валидация источника (A)
+
+    alt 2) Версии последовательны
+        B ->> B: BEGIN TX
+        B ->> B: Проверка v(N-1)->vN и применение изменения
+        B -->> B: COMMIT
+        B -->> A: 4) ACK репликации (docId=X, v=N)
+        B ->> AN: 5) Event: replication_success(docId=X, v=N, source=A, target=B)
+    else 3) Версии не последовательны
+        B ->> B: BEGIN TX
+        B ->> A: GET /api/replication/catch-up?docId=X&to=vN
+        A -->> B: Пропущенные версии v(K+1..N) по порядку
+        B ->> B: Применение пропущенных версий
+        B -->> B: COMMIT
+        B -->> A: 4) ACK репликации (docId=X, v=N)
+        B ->> AN: 5) Event: replication_success(docId=X, v=N, source=A, target=B)
+    end
+
+    Note over A, C: 6) Повторение процесса для узла C (eventual consistency)
+    A ->> C: Репликационное сообщение: docId=X, v=N
+    C ->> C: Валидация и обработка (TX, catch-up при необходимости)
+    C -->> A: ACK репликации (docId=X, v=N)
+    C ->> AN: Event: replication_success(docId=X, v=N, source=A, target=C)
+```
+
 ### Сценарий 5: Отказ узла Text Service и восстановление
 
 1. Docker-контейнер узла Text Service B падает. Load Balancer обнаруживает это через health check и исключает узел из
@@ -648,6 +734,46 @@ sequenceDiagram
    `429 Too Many Requests`.
 3. Сервис отправляет событие `budget_exceeded` в Analytics Service.
 4. Все агенты, получив статус `429`, завершают работу.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AG1 as Agent A
+    participant AG2 as Agent B
+    participant TS as Text Service (Backend)
+    participant DB as База данных
+    participant AN as Analytics Service
+
+    Note over TS: Лимит токенов L = 15,000,000
+
+    loop 1) Последние допустимые правки (tokens_used + cost <= L)
+        par Параллельные правки
+            AG1->>TS: PATCH /api/document/edit (delta d1)
+            AG2->>TS: PATCH /api/document/edit (delta d2)
+        end
+        TS->>DB: BEGIN TX
+        TS->>DB: Проверка лимита и применение изменений
+        TS-->>DB: COMMIT
+        TS-->>AG1: 200 OK / 202 Accepted
+        TS-->>AG2: 200 OK / 202 Accepted
+    end
+
+    AG1->>TS: 2) Следующая правка (delta d_over)
+    TS->>DB: BEGIN TX
+    TS->>DB: Проверка лимита (tokens_used + cost > L)
+    TS-->>DB: ROLLBACK
+    TS->>TS: Пометить документ как budget_exhausted=true
+    TS-->>AG1: 429 Too Many Requests
+
+    TS->>AN: 3) Event: budget_exceeded{ docId, used, limit=L, requester=AG1 }
+
+    par 4) Реакция агентов на 429
+        AG1-->>AG1: Завершить работу
+        AG2->>TS: Следующая попытка правки
+        TS-->>AG2: 429 Too Many Requests
+        AG2-->>AG2: Завершить работу
+    end
+```
 
 ### Сценарий 7: Координация агентов через Chat Service
 
