@@ -1,0 +1,144 @@
+name: Deploy AI Agents
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'services/ai-agent/**'
+      - 'services/text-service/**'
+      - 'services/chat-service/**'
+      - '.github/workflows/deploy-ai-agent.yml'
+  workflow_dispatch:
+    inputs:
+      agent_count:
+        description: 'Number of agents to deploy'
+        required: false
+        default: '5'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Package build context
+        run: |
+          set -e
+          mkdir -p ../build
+          cp -TR . ../build
+          tar -cvf deployAiAgent.tar ../build/
+
+      - name: Copy file via ssh password
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASS }}
+          port: 22
+          source: "deployAiAgent.tar"
+          target: "/tmp/"
+
+      - name: Build and run on remote host
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASS }}
+          port: 22
+          script: |
+            set -e
+            
+            # Extract deployment
+            rm -rf /tmp/ai-agent-deploy || true
+            mkdir -p /tmp/ai-agent-deploy
+            cd /tmp/ai-agent-deploy
+            tar -xvf ../deployAiAgent.tar
+            cd build
+            
+            # Create .env file with secrets
+            cat > .env << EOF
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            API_TOKEN=${{ secrets.API_TOKEN }}
+            PROXY_API_ENDPOINT=https://api.proxyapi.ru/openai/v1
+            EOF
+            
+            # Build Docker images
+            docker-compose build text-service-a text-service-b text-service-c
+            docker-compose build chat-service analytics-service
+            docker-compose build load-balancer
+            docker-compose build ai-agent
+            
+            # Stop and remove old containers
+            docker-compose down || true
+            
+            # Start infrastructure services
+            docker-compose up -d postgres-text-a postgres-text-b postgres-text-c
+            docker-compose up -d postgres-analytics redis
+            
+            # Wait for databases to be ready
+            sleep 10
+            
+            # Start backend services
+            docker-compose up -d text-service-a text-service-b text-service-c
+            docker-compose up -d chat-service analytics-service
+            docker-compose up -d load-balancer
+            
+            # Wait for services to be ready
+            sleep 10
+            
+            # Determine number of agents (from input or default)
+            AGENT_COUNT="${{ github.event.inputs.agent_count }}"
+            if [ -z "$AGENT_COUNT" ]; then
+              AGENT_COUNT=5
+            fi
+            
+            # Define different agent roles
+            AGENT_ROLES=(
+              "general editor"
+              "expert in quantum physics"
+              "style corrector"
+              "fact checker"
+              "grammar expert"
+              "technical writer"
+              "copyeditor"
+              "content strategist"
+              "research specialist"
+              "documentation expert"
+            )
+            
+            # Start AI agents with different roles
+            echo "Starting $AGENT_COUNT AI agents..."
+            for i in $(seq 1 $AGENT_COUNT); do
+              ROLE_INDEX=$((($i - 1) % ${#AGENT_ROLES[@]}))
+              ROLE="${AGENT_ROLES[$ROLE_INDEX]}"
+              AGENT_NAME="ai-agent-$i"
+              
+              echo "Starting agent $i with role: $ROLE"
+              
+              # Stop and remove old agent container if exists
+              docker stop $AGENT_NAME 2>/dev/null || true
+              docker rm $AGENT_NAME 2>/dev/null || true
+              
+              # Start new agent container
+              docker run -d \
+                --name=$AGENT_NAME \
+                --restart=unless-stopped \
+                --network=dream-team-house_dream-team-network \
+                -e AGENT_ID="agent-$i" \
+                -e AGENT_ROLE="$ROLE" \
+                -e API_TOKEN="${{ secrets.API_TOKEN }}" \
+                -e TEXT_SERVICE_URL="http://load-balancer" \
+                -e CHAT_SERVICE_URL="http://load-balancer" \
+                -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+                -e PROXY_API_ENDPOINT="https://api.proxyapi.ru/openai/v1" \
+                -e CYCLE_DELAY_MS="2000" \
+                dream-team-house_ai-agent:latest
+              
+              # Small delay between starting agents
+              sleep 2
+            done
+            
+            echo "Deployment complete! $AGENT_COUNT agents started."
+            
+            # Show running containers
+            docker ps | grep -E "(ai-agent|text-service|chat-service|load-balancer)"
