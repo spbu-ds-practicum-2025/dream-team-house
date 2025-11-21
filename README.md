@@ -39,6 +39,7 @@
 - Docker 24+
 - Docker Compose
 - Git
+- OpenAI API Key (from https://api.proxyapi.ru/)
 
 ### Локальный запуск
 
@@ -85,6 +86,45 @@ docker-compose down
 Для полной очистки (включая данные БД):
 ```bash
 docker-compose down -v
+```
+
+## Production развёртывание
+
+Система поддерживает автоматическое развёртывание через GitHub Actions.
+
+### Необходимые GitHub Secrets
+
+1. **OPENAI_API_KEY** ✅ - API ключ от ProxyAPI (уже добавлен)
+2. **API_TOKEN** - токен для аутентификации агентов
+3. **DEPLOY_HOST** - SSH хост для развёртывания
+4. **DEPLOY_USER** - SSH пользователь
+5. **DEPLOY_PASS** - SSH пароль
+
+См. [DEPLOYMENT.md](DEPLOYMENT.md) для подробной инструкции по развёртыванию.
+
+### Быстрое развёртывание
+
+Push в ветку `main` автоматически запускает деплой через GitHub Actions.
+
+Ручное развёртывание:
+1. Actions → Deploy AI Agents → Run workflow
+2. Укажите количество агентов (по умолчанию: 5)
+3. Run workflow
+
+### Управление агентами на сервере
+
+```bash
+# Запустить 10 агентов
+./scripts/manage-agents.sh start 10
+
+# Остановить все агенты
+./scripts/manage-agents.sh stop
+
+# Перезапустить с 5 агентами
+./scripts/manage-agents.sh restart 5
+
+# Проверить статус
+./scripts/manage-agents.sh status
 ```
 
 ## Как работать
