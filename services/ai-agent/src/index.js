@@ -101,9 +101,11 @@ async function getChatMessages() {
  * Generate edit proposal using OpenAI API via ProxyAPI
  */
 async function generateEdit(documentText, chatMessages) {
-  // Prepare chat context
+  // Prepare chat context with safety checks
   const chatContext = chatMessages.length > 0
-    ? `\n\nДругие агенты обсуждают:\n${chatMessages.map(m => `${m.agent_id}: ${m.message}`).join('\n')}`
+    ? `\n\nДругие агенты обсуждают:\n${chatMessages.map(m => 
+        `${m.agent_id || 'unknown'}: ${m.message || ''}`
+      ).join('\n')}`
     : '';
 
   const systemPrompt = `Ты — ${config.agentRole}, работающий над улучшением документа. 
@@ -127,8 +129,13 @@ async function generateEdit(documentText, chatMessages) {
     max_tokens: 500,
   });
 
-  const response = completion.choices[0].message.content;
-  const tokensUsed = completion.usage.total_tokens;
+  // Safely access response with null checks
+  const response = completion.choices?.[0]?.message?.content;
+  const tokensUsed = completion.usage?.total_tokens || 0;
+
+  if (!response) {
+    throw new Error('No response from OpenAI API');
+  }
 
   // Try to parse JSON response
   try {

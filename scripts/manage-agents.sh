@@ -25,9 +25,11 @@ AGENT_ROLES=(
   "documentation expert"
 )
 
-# Load environment variables
+# Load environment variables safely
 if [ -f "$PROJECT_ROOT/.env" ]; then
-  export $(cat "$PROJECT_ROOT/.env" | grep -v '^#' | xargs)
+  set -a
+  source "$PROJECT_ROOT/.env"
+  set +a
 fi
 
 start_agents() {
