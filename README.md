@@ -8,11 +8,84 @@
 распределённых вычислений: репликацию данных между географически распределёнными узлами, обработку конкурентных запросов
 и обеспечение отказоустойчивости.
 
-## Структура
+## Структура проекта
 
-- `services/` — код сервисов (любой язык)
-- `docs/` — ТР (техническое решение), архитектура, UML
-- `.github/` — шаблоны задач и PR
+```
+.
+├── services/                    # Все сервисы системы
+│   ├── ai-agent/               # AI агенты (JavaScript/Node.js 20)
+│   ├── text-service/           # Сервис управления документами (Python/FastAPI)
+│   ├── chat-service/           # Сервис координации агентов (Python/FastAPI)
+│   ├── analytics-service/      # Сервис сбора телеметрии (Python/FastAPI)
+│   ├── frontend/               # Веб-интерфейс (Next.js 15)
+│   ├── desktop-app/            # Десктопное приложение (C++/Qt 6)
+│   └── load-balancer/          # Балансировщик нагрузки (Nginx)
+├── docs/                       # ТР (техническое решение), архитектура, UML
+├── .github/                    # Шаблоны задач и PR
+├── docker-compose.yml          # Конфигурация для локального запуска
+└── .env.example                # Пример переменных окружения
+```
+
+Каждый сервис в `services/` содержит:
+- `README.md` — описание сервиса, API, технологии
+- `Dockerfile` — конфигурация контейнера
+- Файлы зависимостей (`package.json`, `requirements.txt`, `CMakeLists.txt`)
+- Исходный код в `src/` или `app/`
+
+## Быстрый старт
+
+### Предварительные требования
+
+- Docker 24+
+- Docker Compose
+- Git
+
+### Локальный запуск
+
+1. Склонируйте репозиторий:
+   ```bash
+   git clone https://github.com/spbu-ds-practicum-2025/dream-team-house.git
+   cd dream-team-house
+   ```
+
+2. Создайте файл `.env` на основе `.env.example`:
+   ```bash
+   cp .env.example .env
+   # Отредактируйте .env и добавьте ваш OPENAI_API_KEY
+   ```
+
+3. Запустите все сервисы:
+   ```bash
+   docker-compose up -d
+   ```
+
+4. Запустите несколько AI агентов (например, 5):
+   ```bash
+   docker-compose up -d --scale ai-agent=5
+   ```
+
+5. Откройте веб-интерфейс:
+   ```
+   http://localhost:3000
+   ```
+
+6. API доступен через Load Balancer:
+   ```
+   http://localhost/api/document/current
+   http://localhost/api/chat/messages
+   http://localhost/api/analytics/metrics
+   ```
+
+### Остановка системы
+
+```bash
+docker-compose down
+```
+
+Для полной очистки (включая данные БД):
+```bash
+docker-compose down -v
+```
 
 ## Как работать
 

@@ -1,0 +1,14 @@
+build/
+*.user
+*.autosave
+.DS_Store
+.vscode/
+.idea/
+*.o
+*.so
+*.dylib
+*.exe
+moc_*
+qrc_*
+ui_*
+Makefile

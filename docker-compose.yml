@@ -1,0 +1,186 @@
+version: '3.8'
+
+services:
+  # PostgreSQL databases for Text Service nodes
+  postgres-text-a:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: textservice
+      POSTGRES_USER: textservice
+      POSTGRES_PASSWORD: textservice_password
+    volumes:
+      - postgres-text-a-data:/var/lib/postgresql/data
+    networks:
+      - dream-team-network
+
+  postgres-text-b:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: textservice
+      POSTGRES_USER: textservice
+      POSTGRES_PASSWORD: textservice_password
+    volumes:
+      - postgres-text-b-data:/var/lib/postgresql/data
+    networks:
+      - dream-team-network
+
+  postgres-text-c:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: textservice
+      POSTGRES_USER: textservice
+      POSTGRES_PASSWORD: textservice_password
+    volumes:
+      - postgres-text-c-data:/var/lib/postgresql/data
+    networks:
+      - dream-team-network
+
+  # PostgreSQL database for Analytics Service
+  postgres-analytics:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: analytics
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: analytics_password
+    volumes:
+      - postgres-analytics-data:/var/lib/postgresql/data
+    networks:
+      - dream-team-network
+
+  # Redis for Chat Service
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - dream-team-network
+
+  # Text Service - Node A (Moscow)
+  text-service-a:
+    build:
+      context: ./services/text-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://textservice:textservice_password@postgres-text-a:5432/textservice
+      NODE_ID: node-a
+      NODE_NAME: Moscow
+      ANALYTICS_URL: http://analytics-service:8000
+      PEER_NODES: http://text-service-b:8000,http://text-service-c:8000
+    depends_on:
+      - postgres-text-a
+    networks:
+      - dream-team-network
+
+  # Text Service - Node B (Saint Petersburg)
+  text-service-b:
+    build:
+      context: ./services/text-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://textservice:textservice_password@postgres-text-b:5432/textservice
+      NODE_ID: node-b
+      NODE_NAME: Saint-Petersburg
+      ANALYTICS_URL: http://analytics-service:8000
+      PEER_NODES: http://text-service-a:8000,http://text-service-c:8000
+    depends_on:
+      - postgres-text-b
+    networks:
+      - dream-team-network
+
+  # Text Service - Node C (Novosibirsk)
+  text-service-c:
+    build:
+      context: ./services/text-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://textservice:textservice_password@postgres-text-c:5432/textservice
+      NODE_ID: node-c
+      NODE_NAME: Novosibirsk
+      ANALYTICS_URL: http://analytics-service:8000
+      PEER_NODES: http://text-service-a:8000,http://text-service-b:8000
+    depends_on:
+      - postgres-text-c
+    networks:
+      - dream-team-network
+
+  # Chat Service
+  chat-service:
+    build:
+      context: ./services/chat-service
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - dream-team-network
+
+  # Analytics Service
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://analytics:analytics_password@postgres-analytics:5432/analytics
+    depends_on:
+      - postgres-analytics
+    networks:
+      - dream-team-network
+
+  # Load Balancer
+  load-balancer:
+    build:
+      context: ./services/load-balancer
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - text-service-a
+      - text-service-b
+      - text-service-c
+      - chat-service
+      - analytics-service
+    networks:
+      - dream-team-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost/api
+    depends_on:
+      - load-balancer
+    networks:
+      - dream-team-network
+
+  # AI Agents (can be scaled with docker-compose up --scale ai-agent=5)
+  ai-agent:
+    build:
+      context: ./services/ai-agent
+      dockerfile: Dockerfile
+    environment:
+      AGENT_ROLE: "general editor"
+      API_TOKEN: "test-token-123"
+      TEXT_SERVICE_URL: http://load-balancer
+      CHAT_SERVICE_URL: http://load-balancer
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    depends_on:
+      - load-balancer
+    networks:
+      - dream-team-network
+
+networks:
+  dream-team-network:
+    driver: bridge
+
+volumes:
+  postgres-text-a-data:
+  postgres-text-b-data:
+  postgres-text-c-data:
+  postgres-analytics-data:
+  redis-data:
