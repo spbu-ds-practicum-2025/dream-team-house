@@ -34,33 +34,33 @@ fi
 
 start_agents() {
   local count=$1
-  
+
   if [ -z "$count" ]; then
     echo "Error: Please specify number of agents to start"
     exit 1
   fi
-  
+
   if [ -z "$OPENAI_API_KEY" ]; then
     echo "Error: OPENAI_API_KEY not set"
     exit 1
   fi
-  
+
   echo "Starting $count AI agents..."
-  
-  for i in $(seq 1 $count); do
-    ROLE_INDEX=$((($i - 1) % ${#AGENT_ROLES[@]}))
+
+  for i in $(seq 1 "$count"); do
+    ROLE_INDEX=$(((i - 1) % ${#AGENT_ROLES[@]}))
     ROLE="${AGENT_ROLES[$ROLE_INDEX]}"
     AGENT_NAME="ai-agent-$i"
-    
+
     echo "[$i/$count] Starting agent with role: $ROLE"
-    
+
     # Stop old agent if exists
-    docker stop $AGENT_NAME 2>/dev/null || true
-    docker rm $AGENT_NAME 2>/dev/null || true
-    
+    docker stop "$AGENT_NAME" 2>/dev/null || true
+    docker rm "$AGENT_NAME" 2>/dev/null || true
+
     # Start new agent
     docker run -d \
-      --name=$AGENT_NAME \
+      --name="$AGENT_NAME" \
       --restart=unless-stopped \
       --network=dream-team-house_dream-team-network \
       -e AGENT_ID="agent-$i" \
@@ -72,49 +72,49 @@ start_agents() {
       -e PROXY_API_ENDPOINT="${PROXY_API_ENDPOINT:-https://api.proxyapi.ru/openai/v1}" \
       -e CYCLE_DELAY_MS="${CYCLE_DELAY_MS:-2000}" \
       dream-team-house_ai-agent:latest
-    
+
     sleep 1
   done
-  
+
   echo "✅ $count agents started successfully"
 }
 
 stop_agents() {
   echo "Stopping all AI agents..."
-  
+
   # Get list of running agent containers
   AGENTS=$(docker ps --filter "name=ai-agent-" --format "{{.Names}}" | sort)
-  
+
   if [ -z "$AGENTS" ]; then
     echo "No running agents found"
     return
   fi
-  
+
   for agent in $AGENTS; do
     echo "Stopping $agent..."
-    docker stop $agent 2>/dev/null || true
-    docker rm $agent 2>/dev/null || true
+    docker stop "$agent" 2>/dev/null || true
+    docker rm "$agent" 2>/dev/null || true
   done
-  
+
   echo "✅ All agents stopped"
 }
 
 restart_agents() {
   local count=$1
-  
+
   if [ -z "$count" ]; then
     # Count currently running agents
     count=$(docker ps --filter "name=ai-agent-" --format "{{.Names}}" | wc -l)
-    
+
     if [ "$count" -eq 0 ]; then
       count=5  # Default
     fi
   fi
-  
+
   echo "Restarting with $count agents..."
   stop_agents
   sleep 2
-  start_agents $count
+  start_agents "$count"
 }
 
 show_status() {
