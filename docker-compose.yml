@@ -164,11 +164,14 @@ services:
       context: ./services/ai-agent
       dockerfile: Dockerfile
     environment:
-      AGENT_ROLE: "general editor"
-      API_TOKEN: "test-token-123"
+      AGENT_ID: "${AGENT_ID:-agent-default}"
+      AGENT_ROLE: "${AGENT_ROLE:-general editor}"
+      API_TOKEN: "${API_TOKEN:-test-token-123}"
       TEXT_SERVICE_URL: http://load-balancer
       CHAT_SERVICE_URL: http://load-balancer
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      PROXY_API_ENDPOINT: "${PROXY_API_ENDPOINT:-https://api.proxyapi.ru/openai/v1}"
+      CYCLE_DELAY_MS: "${CYCLE_DELAY_MS:-1000}"
     depends_on:
       - load-balancer
     networks:
