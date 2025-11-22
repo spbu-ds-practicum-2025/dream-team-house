@@ -158,7 +158,7 @@ services:
     networks:
       - dream-team-network
 
-  # AI Agents (can be scaled with docker-compose up --scale ai-agent=3)
+  # AI Agents (scaled to 2 for budget control)
   ai-agent:
     build:
       context: ./services/ai-agent
@@ -170,13 +170,13 @@ services:
       CHAT_SERVICE_URL: http://load-balancer
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       OPENAI_BASE_URL: "https://api.proxyapi.ru/openai/v1"
-      MAX_EDITS: "2"
+      MAX_EDITS: "1"
     depends_on:
       - load-balancer
     networks:
       - dream-team-network
     deploy:
-      replicas: 3
+      replicas: 2
 
 networks:
   dream-team-network:

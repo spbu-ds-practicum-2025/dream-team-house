@@ -24,7 +24,7 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.proxyapi.ru/
 
 // Generate secure agent ID
 const AGENT_ID = `agent-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-const MAX_EDITS = parseInt(process.env.MAX_EDITS || '2');
+const MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;
 

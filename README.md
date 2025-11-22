@@ -244,8 +244,10 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) includes:
 - `OPENAI_BASE_URL` - API base URL (default: ProxyAPI)
 - `TEXT_SERVICE_URL` - Text service URL
 - `CHAT_SERVICE_URL` - Chat service URL
-- `MAX_EDITS` - Maximum edits per agent (default: 5)
+- `MAX_EDITS` - Maximum edits per agent (default: 1)
 - `CYCLE_DELAY_MS` - Delay between cycles in ms (default: 2000)
+
+**Note**: Each edit in the full protocol requires 4 OpenAI API calls (intent generation, confirmation, final operation, review). With 2 agents and 1 edit each, total API calls = 2 × 1 × 4 = 8 calls.
 
 **Text Service**:
 - `DATABASE_URL` - PostgreSQL connection string

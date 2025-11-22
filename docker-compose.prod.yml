@@ -217,13 +217,13 @@ services:
       CHAT_SERVICE_URL: http://load-balancer
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       OPENAI_BASE_URL: "https://api.proxyapi.ru/openai/v1"
-      MAX_EDITS: "2"
+      MAX_EDITS: "1"
     depends_on:
       - load-balancer
     networks:
       - dream-team-network
     deploy:
-      replicas: 3
+      replicas: 2
 
   # Traefik reverse proxy
   traefik:

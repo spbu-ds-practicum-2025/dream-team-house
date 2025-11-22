@@ -48,9 +48,12 @@ Example: `https://orv-frontend.vitasha.ru`
 ## System Configuration
 
 ### Default Limits
-- **AI Agents**: 3 replicas
-- **Edits per Agent**: 2 maximum
-- **Total OpenAI Requests**: 6 (3 agents × 2 edits)
+- **AI Agents**: 2 replicas
+- **Edits per Agent**: 1 maximum
+- **API Calls per Edit**: 4 (intent, confirm, generate, review)
+- **Total OpenAI Requests**: 8 (2 agents × 1 edit × 4 calls)
+
+**Note**: The full protocol from `multi_agent_editor_demo_Version2.py` requires 4 API calls per edit due to the intent-based workflow with multiple phases.
 
 ### Services Architecture
 
@@ -235,9 +238,10 @@ docker run --rm -v postgres-text-a-data:/data -v $(pwd):/backup ubuntu tar czf /
 ## Cost Estimation
 
 ### OpenAI Usage
-- 3 agents × 2 edits = 6 API calls
-- ~500 tokens per edit average
-- Total: ~3,000 tokens per session
+- 2 agents × 1 edit × 4 API calls = 8 API calls total
+- Each edit requires 4 calls: intent generation, confirmation, final operation, review
+- ~500 tokens per API call average
+- Total: ~4,000 tokens per session
 - Cost: ~$0.01-0.02 per session (GPT-4o-mini)
 
 ### Server Requirements
