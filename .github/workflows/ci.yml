@@ -10,11 +10,16 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ${{ github.repository }}
 
+permissions:
+  contents: read
+
 jobs:
   # Unit Tests - Run tests for all services
   test-unit:
     name: Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     strategy:
       matrix:
@@ -48,6 +53,8 @@ jobs:
   test-ai-agent:
     name: AI Agent Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -73,6 +80,8 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     needs: [test-unit, test-ai-agent]
+    permissions:
+      contents: read
     
     strategy:
       matrix:
@@ -105,6 +114,8 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
     
     services:
       postgres-text:
@@ -221,6 +232,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -281,6 +294,8 @@ jobs:
   lint:
     name: Lint and Code Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
