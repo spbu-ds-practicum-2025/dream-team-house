@@ -1,0 +1,127 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_PASS }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          TEXT_SERVICE_A_DOMAIN: ${{ secrets.TEXT_SERVICE_A_DOMAIN }}
+          TEXT_SERVICE_B_DOMAIN: ${{ secrets.TEXT_SERVICE_B_DOMAIN }}
+          TEXT_SERVICE_C_DOMAIN: ${{ secrets.TEXT_SERVICE_C_DOMAIN }}
+          ANALYTICS_SERVICE_DOMAIN: ${{ secrets.ANALYTICS_SERVICE_DOMAIN }}
+          CHAT_SERVICE_DOMAIN: ${{ secrets.CHAT_SERVICE_DOMAIN }}
+          FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+        run: |
+          # Create deployment script
+          cat > deploy.sh << 'DEPLOY_SCRIPT'
+          #!/bin/bash
+          set -e
+          
+          echo "=== Starting deployment ==="
+          
+          # Check if Docker is installed
+          if ! command -v docker &> /dev/null; then
+              echo "Docker not found. Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
+              rm get-docker.sh
+              echo "Docker installed successfully"
+          else
+              echo "Docker is already installed"
+          fi
+          
+          # Check if Docker Compose is installed
+          if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+              echo "Docker Compose not found. Installing Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+              echo "Docker Compose installed successfully"
+          else
+              echo "Docker Compose is already installed"
+          fi
+          
+          # Navigate to deployment directory
+          cd /opt/dream-team-house || sudo mkdir -p /opt/dream-team-house && cd /opt/dream-team-house
+          
+          # Pull latest code (if git repo exists, otherwise we'll copy files)
+          if [ -d ".git" ]; then
+              echo "Updating git repository..."
+              git pull origin main || true
+          fi
+          
+          # Create .env file with secrets
+          cat > .env << 'EOF'
+          OPENAI_API_KEY=${OPENAI_API_KEY}
+          CERTBOT_EMAIL=${CERTBOT_EMAIL}
+          TEXT_SERVICE_A_DOMAIN=${TEXT_SERVICE_A_DOMAIN}
+          TEXT_SERVICE_B_DOMAIN=${TEXT_SERVICE_B_DOMAIN}
+          TEXT_SERVICE_C_DOMAIN=${TEXT_SERVICE_C_DOMAIN}
+          ANALYTICS_SERVICE_DOMAIN=${ANALYTICS_SERVICE_DOMAIN}
+          CHAT_SERVICE_DOMAIN=${CHAT_SERVICE_DOMAIN}
+          FRONTEND_DOMAIN=${FRONTEND_DOMAIN}
+          POSTGRES_PASSWORD=$(openssl rand -base64 32)
+          EOF
+          
+          echo "Environment file created"
+          
+          # Stop existing containers
+          echo "Stopping existing containers..."
+          docker-compose -f docker-compose.prod.yml down || sudo docker compose -f docker-compose.prod.yml down || true
+          
+          # Build and start services
+          echo "Building and starting services..."
+          docker-compose -f docker-compose.prod.yml up -d --build || sudo docker compose -f docker-compose.prod.yml up -d --build
+          
+          # Wait for services to be healthy
+          echo "Waiting for services to start..."
+          sleep 30
+          
+          # Check service status
+          echo "=== Service Status ==="
+          docker-compose -f docker-compose.prod.yml ps || sudo docker compose -f docker-compose.prod.yml ps
+          
+          echo "=== Deployment completed ==="
+          echo "Frontend URL: https://${FRONTEND_DOMAIN}"
+          echo "Check logs with: docker-compose -f docker-compose.prod.yml logs -f"
+          DEPLOY_SCRIPT
+          
+          chmod +x deploy.sh
+          
+          # Copy files to server
+          echo "Copying files to server..."
+          scp -i ~/.ssh/deploy_key -r ./* ${DEPLOY_USER}@${DEPLOY_HOST}:/opt/dream-team-house/ || \
+            (ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_HOST} "sudo mkdir -p /opt/dream-team-house && sudo chown ${DEPLOY_USER}:${DEPLOY_USER} /opt/dream-team-house" && \
+             scp -i ~/.ssh/deploy_key -r ./* ${DEPLOY_USER}@${DEPLOY_HOST}:/opt/dream-team-house/)
+          
+          # Execute deployment script on server
+          echo "Executing deployment on server..."
+          ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_HOST} "cd /opt/dream-team-house && bash deploy.sh"
+          
+          echo "Deployment complete!"
+          echo "Application should be available at: https://${FRONTEND_DOMAIN}"
