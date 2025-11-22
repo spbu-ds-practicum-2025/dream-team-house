@@ -4,10 +4,11 @@ services:
   # PostgreSQL databases for Text Service nodes
   postgres-text-a:
     image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_DB: textservice
       POSTGRES_USER: textservice
-      POSTGRES_PASSWORD: textservice_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textservice_password}
     volumes:
       - postgres-text-a-data:/var/lib/postgresql/data
     networks:
@@ -15,10 +16,11 @@ services:
 
   postgres-text-b:
     image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_DB: textservice
       POSTGRES_USER: textservice
-      POSTGRES_PASSWORD: textservice_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textservice_password}
     volumes:
       - postgres-text-b-data:/var/lib/postgresql/data
     networks:
@@ -26,10 +28,11 @@ services:
 
   postgres-text-c:
     image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_DB: textservice
       POSTGRES_USER: textservice
-      POSTGRES_PASSWORD: textservice_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textservice_password}
     volumes:
       - postgres-text-c-data:/var/lib/postgresql/data
     networks:
@@ -38,10 +41,11 @@ services:
   # PostgreSQL database for Analytics Service
   postgres-analytics:
     image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_DB: analytics
       POSTGRES_USER: analytics
-      POSTGRES_PASSWORD: analytics_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-analytics_password}
     volumes:
       - postgres-analytics-data:/var/lib/postgresql/data
     networks:
@@ -50,6 +54,7 @@ services:
   # Redis for Chat Service
   redis:
     image: redis:7-alpine
+    restart: always
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
@@ -61,8 +66,9 @@ services:
     build:
       context: ./services/text-service
       dockerfile: Dockerfile
+    restart: always
     environment:
-      DATABASE_URL: postgresql://textservice:textservice_password@postgres-text-a:5432/textservice
+      DATABASE_URL: ******postgres-text-a:5432/textservice
       NODE_ID: node-a
       NODE_NAME: Moscow
       ANALYTICS_URL: http://analytics-service:8000
@@ -71,14 +77,21 @@ services:
       - postgres-text-a
     networks:
       - dream-team-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.text-a.rule=Host(`${TEXT_SERVICE_A_DOMAIN}`)"
+      - "traefik.http.routers.text-a.entrypoints=websecure"
+      - "traefik.http.routers.text-a.tls.certresolver=letsencrypt"
+      - "traefik.http.services.text-a.loadbalancer.server.port=8000"
 
   # Text Service - Node B (Saint Petersburg)
   text-service-b:
     build:
       context: ./services/text-service
       dockerfile: Dockerfile
+    restart: always
     environment:
-      DATABASE_URL: postgresql://textservice:textservice_password@postgres-text-b:5432/textservice
+      DATABASE_URL: ******postgres-text-b:5432/textservice
       NODE_ID: node-b
       NODE_NAME: Saint-Petersburg
       ANALYTICS_URL: http://analytics-service:8000
@@ -87,14 +100,21 @@ services:
       - postgres-text-b
     networks:
       - dream-team-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.text-b.rule=Host(`${TEXT_SERVICE_B_DOMAIN}`)"
+      - "traefik.http.routers.text-b.entrypoints=websecure"
+      - "traefik.http.routers.text-b.tls.certresolver=letsencrypt"
+      - "traefik.http.services.text-b.loadbalancer.server.port=8000"
 
   # Text Service - Node C (Novosibirsk)
   text-service-c:
     build:
       context: ./services/text-service
       dockerfile: Dockerfile
+    restart: always
     environment:
-      DATABASE_URL: postgresql://textservice:textservice_password@postgres-text-c:5432/textservice
+      DATABASE_URL: ******postgres-text-c:5432/textservice
       NODE_ID: node-c
       NODE_NAME: Novosibirsk
       ANALYTICS_URL: http://analytics-service:8000
@@ -103,38 +123,57 @@ services:
       - postgres-text-c
     networks:
       - dream-team-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.text-c.rule=Host(`${TEXT_SERVICE_C_DOMAIN}`)"
+      - "traefik.http.routers.text-c.entrypoints=websecure"
+      - "traefik.http.routers.text-c.tls.certresolver=letsencrypt"
+      - "traefik.http.services.text-c.loadbalancer.server.port=8000"
 
   # Chat Service
   chat-service:
     build:
       context: ./services/chat-service
       dockerfile: Dockerfile
+    restart: always
     environment:
       REDIS_URL: redis://redis:6379
     depends_on:
       - redis
     networks:
       - dream-team-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.chat.rule=Host(`${CHAT_SERVICE_DOMAIN}`)"
+      - "traefik.http.routers.chat.entrypoints=websecure"
+      - "traefik.http.routers.chat.tls.certresolver=letsencrypt"
+      - "traefik.http.services.chat.loadbalancer.server.port=8000"
 
   # Analytics Service
   analytics-service:
     build:
       context: ./services/analytics-service
       dockerfile: Dockerfile
+    restart: always
     environment:
-      DATABASE_URL: postgresql://analytics:analytics_password@postgres-analytics:5432/analytics
+      DATABASE_URL: ******postgres-analytics:5432/analytics
     depends_on:
       - postgres-analytics
     networks:
       - dream-team-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.analytics.rule=Host(`${ANALYTICS_SERVICE_DOMAIN}`)"
+      - "traefik.http.routers.analytics.entrypoints=websecure"
+      - "traefik.http.routers.analytics.tls.certresolver=letsencrypt"
+      - "traefik.http.services.analytics.loadbalancer.server.port=8000"
 
-  # Load Balancer
+  # Load Balancer (internal, not exposed)
   load-balancer:
     build:
       context: ./services/load-balancer
       dockerfile: Dockerfile
-    ports:
-      - "80:80"
+    restart: always
     depends_on:
       - text-service-a
       - text-service-b
@@ -149,20 +188,28 @@ services:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    restart: always
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost/api
+      NEXT_PUBLIC_API_URL: https://${TEXT_SERVICE_A_DOMAIN}
+      NEXT_PUBLIC_CHAT_URL: https://${CHAT_SERVICE_DOMAIN}
+      NEXT_PUBLIC_ANALYTICS_URL: https://${ANALYTICS_SERVICE_DOMAIN}
     depends_on:
       - load-balancer
     networks:
       - dream-team-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
-  # AI Agents (can be scaled with docker-compose up --scale ai-agent=3)
+  # AI Agents
   ai-agent:
     build:
       context: ./services/ai-agent
       dockerfile: Dockerfile
+    restart: always
     environment:
       AGENT_ROLE: "general editor"
       API_TOKEN: "test-token-123"
@@ -178,6 +225,31 @@ services:
     deploy:
       replicas: 3
 
+  # Traefik reverse proxy
+  traefik:
+    image: traefik:v2.10
+    restart: always
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=${CERTBOT_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+    networks:
+      - dream-team-network
+
 networks:
   dream-team-network:
     driver: bridge
@@ -188,3 +260,4 @@ volumes:
   postgres-text-c-data:
   postgres-analytics-data:
   redis-data:
+  letsencrypt:
