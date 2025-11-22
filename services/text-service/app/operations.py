@@ -5,6 +5,11 @@ Based on multi_agent_editor_demo_Version2.py
 from typing import Optional, Tuple
 from app.schemas import EditRequest
 
+# Text length limits
+MAX_NEW_TEXT_LENGTH = 10000
+MAX_ANCHOR_LENGTH = 5000
+MAX_OLD_TEXT_LENGTH = 5000
+
 
 def apply_operation_to_text(text: str, edit: EditRequest) -> Tuple[str, bool]:
     """
@@ -108,13 +113,13 @@ def validate_edit_request(edit: EditRequest) -> Tuple[bool, Optional[str]]:
             return False, "Delete operation requires anchor or old_text"
     
     # Check text length limits
-    if edit.new_text and len(edit.new_text) > 10000:
-        return False, "new_text exceeds 10000 character limit"
+    if edit.new_text and len(edit.new_text) > MAX_NEW_TEXT_LENGTH:
+        return False, f"new_text exceeds {MAX_NEW_TEXT_LENGTH} character limit"
     
-    if edit.anchor and len(edit.anchor) > 5000:
-        return False, "anchor exceeds 5000 character limit"
+    if edit.anchor and len(edit.anchor) > MAX_ANCHOR_LENGTH:
+        return False, f"anchor exceeds {MAX_ANCHOR_LENGTH} character limit"
     
-    if edit.old_text and len(edit.old_text) > 5000:
-        return False, "old_text exceeds 5000 character limit"
+    if edit.old_text and len(edit.old_text) > MAX_OLD_TEXT_LENGTH:
+        return False, f"old_text exceeds {MAX_OLD_TEXT_LENGTH} character limit"
     
     return True, None

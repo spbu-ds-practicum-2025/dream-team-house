@@ -111,9 +111,13 @@ async def init_document(
     
     if count > 0:
         # Delete existing documents (as per spec: only one document at a time)
-        await db.execute("DELETE FROM documents")
-        await db.execute("DELETE FROM edits")
-        await db.execute("UPDATE token_budget SET total_tokens = 0 WHERE id = 1")
+        await db.execute(Document.__table__.delete())
+        await db.execute(Edit.__table__.delete())
+        await db.execute(
+            TokenBudget.__table__.update()
+            .where(TokenBudget.id == 1)
+            .values(total_tokens=0)
+        )
         await db.commit()
         logger.info("Cleared existing documents")
     

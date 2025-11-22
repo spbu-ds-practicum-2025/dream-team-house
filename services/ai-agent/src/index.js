@@ -22,8 +22,8 @@ const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL || 'http://localhost';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.proxyapi.ru/openai/v1';
 
-// Agent configuration
-const AGENT_ID = `agent-${Math.random().toString(36).substring(7)}`;
+// Generate secure agent ID
+const AGENT_ID = `agent-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 const MAX_EDITS = parseInt(process.env.MAX_EDITS || '5');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;

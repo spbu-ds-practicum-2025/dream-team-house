@@ -34,7 +34,11 @@ async def replicate_to_peers(version: int, text: str, timestamp: datetime, edit_
     
     # Wait for all replications with timeout
     if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Log any exceptions that occurred
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Replication task {i} failed with exception: {result}")
 
 
 async def replicate_to_node(
