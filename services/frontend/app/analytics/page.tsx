@@ -177,34 +177,34 @@ export default function AnalyticsPage() {
                 Использование токенов
               </h2>
               <div className="space-y-2">
-                {metrics.token_usage_by_time.map((point, index) => (
-                  <div key={index} className="flex items-center">
-                    <div className="w-48 text-sm text-gray-600">
-                      {new Date(point.timestamp).toLocaleString('ru-RU', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </div>
-                    <div className="flex-1 ml-4">
-                      <div className="bg-gray-200 rounded-full h-4">
-                        <div
-                          className="bg-indigo-600 h-4 rounded-full"
-                          style={{
-                            width: `${Math.min(
-                              (point.value / Math.max(...metrics.token_usage_by_time.map((p) => p.value), 1)) * 100,
-                              100
-                            )}%`,
-                          }}
-                        ></div>
+                {(() => {
+                  const maxValue = Math.max(...metrics.token_usage_by_time.map((p) => p.value), 1)
+                  return metrics.token_usage_by_time.map((point, index) => (
+                    <div key={index} className="flex items-center">
+                      <div className="w-48 text-sm text-gray-600">
+                        {new Date(point.timestamp).toLocaleString('ru-RU', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                      <div className="flex-1 ml-4">
+                        <div className="bg-gray-200 rounded-full h-4">
+                          <div
+                            className="bg-indigo-600 h-4 rounded-full"
+                            style={{
+                              width: `${Math.min((point.value / maxValue) * 100, 100)}%`,
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div className="w-20 text-right text-sm font-medium text-gray-900">
+                        {point.value}
                       </div>
                     </div>
-                    <div className="w-20 text-right text-sm font-medium text-gray-900">
-                      {point.value}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                })()}
               </div>
             </div>
 

@@ -68,7 +68,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: ******postgres-text-a:5432/textservice
+      DATABASE_URL: postgresql://textservice:${POSTGRES_PASSWORD:-textservice_password}@postgres-text-a:5432/textservice
       NODE_ID: node-a
       NODE_NAME: Moscow
       ANALYTICS_URL: http://analytics-service:8000
@@ -91,7 +91,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: ******postgres-text-b:5432/textservice
+      DATABASE_URL: postgresql://textservice:${POSTGRES_PASSWORD:-textservice_password}@postgres-text-b:5432/textservice
       NODE_ID: node-b
       NODE_NAME: Saint-Petersburg
       ANALYTICS_URL: http://analytics-service:8000
@@ -114,7 +114,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: ******postgres-text-c:5432/textservice
+      DATABASE_URL: postgresql://textservice:${POSTGRES_PASSWORD:-textservice_password}@postgres-text-c:5432/textservice
       NODE_ID: node-c
       NODE_NAME: Novosibirsk
       ANALYTICS_URL: http://analytics-service:8000
@@ -156,7 +156,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: ******postgres-analytics:5432/analytics
+      DATABASE_URL: postgresql://analytics:${POSTGRES_PASSWORD:-analytics_password}@postgres-analytics:5432/analytics
     depends_on:
       - postgres-analytics
     networks:

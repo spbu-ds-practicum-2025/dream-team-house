@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export default function Home() {
+  const router = useRouter()
   const [topic, setTopic] = useState('')
   const [initialText, setInitialText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -36,7 +38,7 @@ export default function Home() {
 
       setSuccess(true)
       setTimeout(() => {
-        window.location.href = '/document'
+        router.push('/document')
       }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
