@@ -73,7 +73,7 @@ async def post_event(
             version=event.version,
             tokens=event.tokens,
             timestamp=event.timestamp,
-            metadata=event.metadata,
+            event_metadata=event.metadata,
         )
         db.add(db_event)
         await db.commit()
@@ -154,14 +154,14 @@ async def get_metrics(
         time_range_minutes = (now - since).total_seconds() / 60
         edits_per_minute = total_edits / time_range_minutes if time_range_minutes > 0 else 0
         
-        # Average latency (if stored in metadata)
+        # Average latency (if stored in event_metadata)
         result = await db.execute(
-            select(Event.metadata)
+            select(Event.event_metadata)
             .where(
                 and_(
                     Event.event_type.in_(["replication_success", "replication_failed"]),
                     Event.timestamp >= since,
-                    Event.metadata.isnot(None)
+                    Event.event_metadata.isnot(None)
                 )
             )
         )

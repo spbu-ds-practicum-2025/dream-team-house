@@ -19,7 +19,7 @@ class Event(Base):
     version = Column(Integer, nullable=True)
     tokens = Column(Integer, nullable=True)
     timestamp = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    metadata = Column(JSONB, nullable=True)
+    event_metadata = Column(JSONB, nullable=True)
 
     __table_args__ = (
         Index('idx_events_timestamp', 'timestamp', postgresql_using='btree'),
