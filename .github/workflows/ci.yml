@@ -119,7 +119,7 @@ jobs:
 
     services:
       postgres-text:
-        image: postgres: 15-alpine
+        image: postgres:15-alpine
         env:
           POSTGRES_DB: textservice
           POSTGRES_USER: textservice

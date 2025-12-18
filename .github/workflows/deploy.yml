@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name:  Checkout code
         uses: actions/checkout@v4
 
       - name: Install sshpass and prepare known_hosts
@@ -36,22 +36,17 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PASS: ${{ secrets.DEPLOY_PASS }}
-          DEPLOY_PORT: ${{ secrets. DEPLOY_PORT }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           TEXT_SERVICE_A_DOMAIN: ${{ secrets.TEXT_SERVICE_A_DOMAIN }}
           TEXT_SERVICE_B_DOMAIN: ${{ secrets.TEXT_SERVICE_B_DOMAIN }}
-          TEXT_SERVICE_C_DOMAIN: ${{ secrets.TEXT_SERVICE_C_DOMAIN }}
+          TEXT_SERVICE_C_DOMAIN:  ${{ secrets.TEXT_SERVICE_C_DOMAIN }}
           ANALYTICS_SERVICE_DOMAIN: ${{ secrets.ANALYTICS_SERVICE_DOMAIN }}
-          CHAT_SERVICE_DOMAIN: ${{ secrets. CHAT_SERVICE_DOMAIN }}
-          FRONTEND_DOMAIN:  ${{ secrets.FRONTEND_DOMAIN }}
-          OPENAI_API_KEY: ${{ secrets. OPENAI_API_KEY }}
-          CERTBOT_EMAIL:  ${{ secrets.CERTBOT_EMAIL }}
+          CHAT_SERVICE_DOMAIN: ${{ secrets.CHAT_SERVICE_DOMAIN }}
+          FRONTEND_DOMAIN: ${{ secrets.FRONTEND_DOMAIN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
         run: |
-          # Create deployment script
-          cat > deploy.sh << 'DEPLOY_SCRIPT'
-          #!/bin/bash
-          set -e
-          
-          echo "=== Starting deployment ==="
+          # Setup SSH options
           SSH_PORT_OPTION=""
           SCP_PORT_OPTION=""
           if [ -n "${DEPLOY_PORT:-}" ]; then
@@ -61,45 +56,14 @@ jobs:
           SSH_BASE_OPTS="-o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no ${SSH_PORT_OPTION}"
           SCP_BASE_OPTS="-o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no ${SCP_PORT_OPTION}"
           
-          # Check if Docker is installed
-          if ! command -v docker &> /dev/null; then
-              echo "Docker not found. Installing Docker..."
-              curl -fsSL https://get.docker.com -o get-docker.sh
-              sudo sh get-docker.sh
-              sudo usermod -aG docker $USER
-              rm get-docker.sh
-              echo "Docker installed successfully"
-          else
-              echo "Docker is already installed"
-          fi
+          echo "=== Preparing deployment directory on server ==="
+          sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" "sudo mkdir -p /opt/dream-team-house && sudo chown ${DEPLOY_USER}:${DEPLOY_USER} /opt/dream-team-house && sudo chmod 755 /opt/dream-team-house"
           
-          # Check if Docker Compose is installed (v2 style)
-          if ! docker compose version &> /dev/null; then
-              echo "Docker Compose not found. Installing Docker Compose..."
-              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-              # Create symlink for docker compose plugin
-              sudo mkdir -p /usr/local/lib/docker/cli-plugins
-              sudo ln -sf /usr/local/bin/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
-              echo "Docker Compose installed successfully"
-          else
-              echo "Docker Compose is already installed"
-          fi
-          
-          # Create deployment directory
-          sudo mkdir -p /opt/dream-team-house
-          sudo chown ${DEPLOY_USER}:${DEPLOY_USER} /opt/dream-team-house
-          
-          echo "Checking SSH connectivity..."
-          sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" "whoami && hostname && pwd && ls -ld /opt/dream-team-house"
-          
-          # Copy files to server
-          echo "Copying files to server..."
+          echo "=== Copying files to server ==="
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} -r ./* "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/
           
-          # Create .env file on server
-          echo "Creating .env file on server..."
-          cat > . env. tmp << EOF
+          echo "=== Creating .env file on server ==="
+          cat > env_file << EOF
           OPENAI_API_KEY=${OPENAI_API_KEY}
           CERTBOT_EMAIL=${CERTBOT_EMAIL}
           TEXT_SERVICE_A_DOMAIN=${TEXT_SERVICE_A_DOMAIN}
@@ -108,47 +72,70 @@ jobs:
           ANALYTICS_SERVICE_DOMAIN=${ANALYTICS_SERVICE_DOMAIN}
           CHAT_SERVICE_DOMAIN=${CHAT_SERVICE_DOMAIN}
           FRONTEND_DOMAIN=${FRONTEND_DOMAIN}
-          POSTGRES_PASSWORD=\$(openssl rand -base64 32)
           EOF
           
-          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} . env.tmp "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/. env
-          rm .env.tmp
+          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} env_file "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/.env
+          rm env_file
           
-          # Execute deployment commands on server
-          echo "Executing deployment on server..."
+          echo "=== Executing deployment on server ==="
           sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" bash << 'REMOTE_COMMANDS'
           set -e
           cd /opt/dream-team-house
           
-          # Generate POSTGRES_PASSWORD if not exists
-          if !  grep -q "POSTGRES_PASSWORD=" .env 2>/dev/null || [ -z "$(grep POSTGRES_PASSWORD= .env | cut -d= -f2)" ]; then
+          echo "=== Current directory: $(pwd) ==="
+          
+          # Generate POSTGRES_PASSWORD if not exists in .env
+          if !  grep -q "^POSTGRES_PASSWORD=" .env 2>/dev/null; then
               echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)" >> .env
           fi
           
-          echo "=== Environment file created ==="
+          echo "=== Environment file content (secrets hidden) ==="
+          grep -v "API_KEY\|PASSWORD" .env || echo "No .env file found"
           
-          # Stop existing containers (use docker compose v2 syntax)
-          echo "Stopping existing containers..."
-          docker compose -f docker-compose.prod. yml down 2>/dev/null || true
+          # Check Docker and Docker Compose
+          if !  command -v docker &> /dev/null; then
+              echo "Docker not found Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
+              rm get-docker.sh
+              echo "Docker installed successfully"
+          else
+              echo "Docker is already installed:  $(docker --version)"
+          fi
+          
+          if ! docker compose version &> /dev/null; then
+              echo "Docker Compose not found Installing Docker Compose..."
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+              echo "Docker Compose installed successfully"
+          else
+              echo "Docker Compose is already installed: $(docker compose version)"
+          fi
+          
+          # Stop existing containers
+          echo "=== Stopping existing containers ==="
+          docker compose -f docker-compose.prod.yml down 2>/dev/null || true
           
           # Build and start services
-          echo "Building and starting services..."
+          echo "=== Building and starting services ==="
           docker compose -f docker-compose.prod.yml up -d --build
           
           # Wait for services to be healthy
-          echo "Waiting for services to start..."
+          echo "=== Waiting for services to start ==="
           sleep 30
           
           # Check service status
           echo "=== Service Status ==="
-          docker compose -f docker-compose.prod. yml ps
+          docker compose -f docker-compose.prod.yml ps
           
-          echo "=== Deployment completed ==="
+          echo "=== Deployment completed successfully ==="
           REMOTE_COMMANDS
           
-          echo "Deployment complete!"
-          echo "Application should be available at: https://${FRONTEND_DOMAIN}"
-          DEPLOY_SCRIPT
-          
-          chmod +x deploy.sh
-          bash deploy.sh
+          echo ""
+          echo "✅ Deployment complete!"
+          echo "🌐 Application should be available at: https://${FRONTEND_DOMAIN}"
+          echo ""
+          echo "To check logs, run:"
+          echo "  ssh ${DEPLOY_USER}@${DEPLOY_HOST} 'cd /opt/dream-team-house && docker compose -f docker-compose.prod.yml logs -f'"
