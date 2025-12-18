@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, update
 from sqlalchemy.orm import selectinload
 
-from app.database import get_db, init_db
+from app.database import get_db, init_db, AsyncSessionLocal
 from app.models import Document, Edit, TokenBudget, EditStatus
 from app.schemas import (
     DocumentResponse,
@@ -41,9 +41,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"Text Service starting - Node: {NODE_ID}")
     await init_db()
     logger.info("Database initialized")
-    
+
+    # стало:
     # Initialize token budget if not exists
-    async with get_db().__anext__() as db:
+    async with AsyncSessionLocal() as db:
         result = await db.execute(select(TokenBudget).where(TokenBudget.id == 1))
         budget = result.scalar_one_or_none()
         if not budget:
