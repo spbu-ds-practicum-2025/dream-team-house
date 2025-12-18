@@ -197,7 +197,7 @@ services:
       - "--log.level=INFO"
 
       # Providers: ONLY file (no docker provider)
-      - "--providers.file.filename=/etc/services/traefik/dynamic.yml"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
       - "--providers.file.watch=true"
 
       # Entrypoints
@@ -220,7 +220,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - "./services/traefik/dynamic.yml:/etc/services/traefik/dynamic.yml:ro"
+      - "./services/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro"
       - "letsencrypt:/letsencrypt"
     networks:
       - dream-team-network
