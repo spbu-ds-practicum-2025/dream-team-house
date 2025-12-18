@@ -158,6 +158,10 @@ services:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://${TEXT_SERVICE_A_DOMAIN}
+        NEXT_PUBLIC_CHAT_URL: https://${CHAT_SERVICE_DOMAIN}
+        NEXT_PUBLIC_ANALYTICS_URL: https://${ANALYTICS_SERVICE_DOMAIN}
     restart: always
     environment:
       NEXT_PUBLIC_API_URL: https://${TEXT_SERVICE_A_DOMAIN}

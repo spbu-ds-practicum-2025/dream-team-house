@@ -2,34 +2,47 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# --- Build-time public env for Next.js (embedded into client bundles) ---
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_CHAT_URL
+ARG NEXT_PUBLIC_ANALYTICS_URL
+
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_CHAT_URL=${NEXT_PUBLIC_CHAT_URL}
+ENV NEXT_PUBLIC_ANALYTICS_URL=${NEXT_PUBLIC_ANALYTICS_URL}
 
 # Install dependencies
+COPY package*.json ./
 RUN npm ci
 
-# Copy source
+# Copy source and build
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Production image
-FROM node:20-alpine
+
+# ---- Production runtime image (Next.js standalone) ----
+FROM node:20-alpine AS runner
 
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy built assets
-COPY --from=builder /app/.next ./.next
-#COPY --from=builder /app/public ./public
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# (Optional) for debugging inside container:
+# RUN apk add --no-cache curl
+
+# Copy standalone server + required node_modules subset
+# This produces /app/server.js and /app/node_modules (minimal) inside standalone output
+COPY --from=builder /app/.next/standalone ./
+
+# Copy static assets (Next requires this path at runtime)
+COPY --from=builder /app/.next/static ./.next/static
+
+# Copy public assets if you have them
+COPY --from=builder /app/public ./public
 
 # Run as non-root user
 USER node
 
-# Expose port
 EXPOSE 3000
 
-# Start Next.js
-CMD ["npm", "start"]
+# Start Next.js standalone server
+CMD ["node", "server.js"]
