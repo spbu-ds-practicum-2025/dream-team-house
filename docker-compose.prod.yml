@@ -227,20 +227,36 @@ services:
 
   # Traefik reverse proxy
   traefik:
-    image: traefik:v2.10
+    image: traefik:v3.3
     restart: always
     command:
-      - "--api.dashboard=true"
+      # Logs (чтобы видеть ACME и docker provider)
+      - "--log.level=INFO"
+
+      # Docker provider
       - "--providers.docker=true"
+      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
       - "--providers.docker.exposedbydefault=false"
+
+      # Entrypoints
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+
+      # HTTP->HTTPS redirect
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+
+      # ACME (Let's Encrypt)
       - "--certificatesresolvers.letsencrypt.acme.email=${CERTBOT_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+
+      # (Опционально) dashboard для отладки. НЕ публикуй порт наружу.
+      # Если нужно смотреть - делай ssh tunnel на сервер.
+      - "--api.dashboard=true"
+      # - "--api.insecure=true"  # включай только если понимаешь риски
+
     ports:
       - "80:80"
       - "443:443"

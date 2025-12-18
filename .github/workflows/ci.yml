@@ -257,6 +257,7 @@ jobs:
       - name: Check service health
         run: |
           curl -f http://localhost/health || exit 1
+          curl -fsS http://localhost/api/document/current | jq -e '.version' >/dev/null || exit 1
           docker compose ps
 
       - name:  Initialize document
@@ -272,14 +273,30 @@ jobs:
       - name: Wait for some edits
         run: sleep 60
 
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Check document changed
         run: |
-          RESPONSE=$(curl -s http://localhost/api/document/current)
-          VERSION=$(echo $RESPONSE | jq -r '.version')
+          set -euo pipefail
+          RESPONSE="$(curl -fsS http://localhost/api/document/current)" || {
+            echo "Failed to fetch document."
+            curl -sS -D- http://localhost/api/document/current || true
+            exit 1
+          }
+
+          VERSION="$(echo "$RESPONSE" | jq -er '.version')" || {
+            echo "Non-JSON response:"
+            echo "$RESPONSE"
+            exit 1
+          }
+
           if [ "$VERSION" -gt 1 ]; then
             echo "✅ Document has been edited (version: $VERSION)"
           else
-            echo "❌ No edits were made"
+            echo "❌ No edits were made (version: $VERSION)"
             exit 1
           fi
 
