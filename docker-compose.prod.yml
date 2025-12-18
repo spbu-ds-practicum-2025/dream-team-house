@@ -77,12 +77,6 @@ services:
       - postgres-text-a
     networks:
       - dream-team-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.text-a.rule=Host(`${TEXT_SERVICE_A_DOMAIN}`)"
-      - "traefik.http.routers.text-a.entrypoints=websecure"
-      - "traefik.http.routers.text-a.tls.certresolver=letsencrypt"
-      - "traefik.http.services.text-a.loadbalancer.server.port=8000"
 
   # Text Service - Node B (Saint Petersburg)
   text-service-b:
@@ -100,12 +94,6 @@ services:
       - postgres-text-b
     networks:
       - dream-team-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.text-b.rule=Host(`${TEXT_SERVICE_B_DOMAIN}`)"
-      - "traefik.http.routers.text-b.entrypoints=websecure"
-      - "traefik.http.routers.text-b.tls.certresolver=letsencrypt"
-      - "traefik.http.services.text-b.loadbalancer.server.port=8000"
 
   # Text Service - Node C (Novosibirsk)
   text-service-c:
@@ -123,12 +111,6 @@ services:
       - postgres-text-c
     networks:
       - dream-team-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.text-c.rule=Host(`${TEXT_SERVICE_C_DOMAIN}`)"
-      - "traefik.http.routers.text-c.entrypoints=websecure"
-      - "traefik.http.routers.text-c.tls.certresolver=letsencrypt"
-      - "traefik.http.services.text-c.loadbalancer.server.port=8000"
 
   # Chat Service
   chat-service:
@@ -142,12 +124,6 @@ services:
       - redis
     networks:
       - dream-team-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.chat.rule=Host(`${CHAT_SERVICE_DOMAIN}`)"
-      - "traefik.http.routers.chat.entrypoints=websecure"
-      - "traefik.http.routers.chat.tls.certresolver=letsencrypt"
-      - "traefik.http.services.chat.loadbalancer.server.port=8000"
 
   # Analytics Service
   analytics-service:
@@ -161,12 +137,6 @@ services:
       - postgres-analytics
     networks:
       - dream-team-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.analytics.rule=Host(`${ANALYTICS_SERVICE_DOMAIN}`)"
-      - "traefik.http.routers.analytics.entrypoints=websecure"
-      - "traefik.http.routers.analytics.tls.certresolver=letsencrypt"
-      - "traefik.http.services.analytics.loadbalancer.server.port=8000"
 
   # Load Balancer (internal, not exposed)
   load-balancer:
@@ -197,12 +167,6 @@ services:
       - load-balancer
     networks:
       - dream-team-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`${FRONTEND_DOMAIN}`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
   # AI Agents
   ai-agent:
@@ -225,18 +189,16 @@ services:
     deploy:
       replicas: 2
 
-  # Traefik reverse proxy
+  # Traefik reverse proxy (FILE provider only)
   traefik:
     image: traefik:v3.3
     restart: always
     command:
-      # Logs (чтобы видеть ACME и docker provider)
       - "--log.level=INFO"
 
-      # Docker provider
-      - "--providers.docker=true"
-      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
-      - "--providers.docker.exposedbydefault=false"
+      # Providers: ONLY file (no docker provider)
+      - "--providers.file.filename=/etc/services/traefik/dynamic.yml"
+      - "--providers.file.watch=true"
 
       # Entrypoints
       - "--entrypoints.web.address=:80"
@@ -252,16 +214,13 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
 
-      # (Опционально) dashboard для отладки. НЕ публикуй порт наружу.
-      # Если нужно смотреть - делай ssh tunnel на сервер.
+      # Dashboard (не публикуем порт наружу)
       - "--api.dashboard=true"
-      # - "--api.insecure=true"  # включай только если понимаешь риски
-
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./services/traefik/dynamic.yml:/etc/services/traefik/dynamic.yml:ro"
       - "letsencrypt:/letsencrypt"
     networks:
       - dream-team-network

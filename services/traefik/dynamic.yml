@@ -1,0 +1,74 @@
+http:
+  routers:
+    frontend:
+      rule: "Host(`orv-frontend.vitasha.ru`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      service: frontend
+
+    text-a:
+      rule: "Host(`text-service-a.vitasha.ru`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      service: text-a
+
+    text-b:
+      rule: "Host(`text-service-b.vitasha.ru`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      service: text-b
+
+    text-c:
+      rule: "Host(`text-service-c.vitasha.ru`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      service: text-c
+
+    chat:
+      rule: "Host(`chat-service.vitasha.ru`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      service: chat
+
+    analytics:
+      rule: "Host(`analytics-service.vitasha.ru`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      service: analytics
+
+  services:
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:3000"
+
+    text-a:
+      loadBalancer:
+        servers:
+          - url: "http://text-service-a:8000"
+
+    text-b:
+      loadBalancer:
+        servers:
+          - url: "http://text-service-b:8000"
+
+    text-c:
+      loadBalancer:
+        servers:
+          - url: "http://text-service-c:8000"
+
+    chat:
+      loadBalancer:
+        servers:
+          - url: "http://chat-service:8000"
+
+    analytics:
+      loadBalancer:
+        servers:
+          - url: "http://analytics-service:8000"
