@@ -37,7 +37,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
 # Copy public assets if you have them
-COPY --from=builder /app/public ./public
+#COPY --from=builder /app/public ./public
 
 # Run as non-root user
 USER node
