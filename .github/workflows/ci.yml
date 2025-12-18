@@ -124,6 +124,8 @@ jobs:
           POSTGRES_DB: textservice
           POSTGRES_USER: textservice
           POSTGRES_PASSWORD: textservice_password
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -136,6 +138,8 @@ jobs:
           POSTGRES_DB: analytics
           POSTGRES_USER: analytics
           POSTGRES_PASSWORD: analytics_password
+        ports:
+          - 5433:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -144,6 +148,8 @@ jobs:
       
       redis:
         image: redis:7-alpine
+        ports:
+          - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -188,7 +194,7 @@ jobs:
       - name: Start Analytics Service
         working-directory: ./services/analytics-service
         env:
-          DATABASE_URL: postgresql://analytics:analytics_password@localhost:5432/analytics
+          DATABASE_URL: postgresql://analytics:analytics_password@localhost:5433/analytics
         run: |
           pip install -r requirements.txt
           uvicorn app.main:app --host 0.0.0.0 --port 8001 &
