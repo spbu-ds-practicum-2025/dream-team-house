@@ -207,10 +207,12 @@ def build_document_response(
     """Compose document response with metadata."""
     default_agent_count = 3 if session.mode == "light" else 10
     agent_count = settings.agent_count if settings else default_agent_count
+    if not agent_count or agent_count <= 0:
+        agent_count = default_agent_count
     max_edits_per_agent = (
         settings.max_edits_per_agent
         if settings and settings.max_edits_per_agent
-        else (int(session.max_edits / agent_count) if session.max_edits else None)
+        else (int(session.max_edits / agent_count) if session.max_edits and agent_count > 0 else None)
     )
     agent_roles = settings.agent_roles if settings and settings.agent_roles else resolve_default_roles(session.mode, agent_count)
 
@@ -775,8 +777,10 @@ async def replication_sync(
         if not session_obj:
             session_status = safe_status(request.status)
             incoming_agent_count = request.agent_count or (len(request.agent_roles or []) or (3 if request.mode == "light" else 10))
+            if incoming_agent_count <= 0:
+                incoming_agent_count = 3 if request.mode == "light" else 10
             incoming_max_per_agent = request.max_edits_per_agent or (
-                int(request.max_edits / incoming_agent_count) if request.max_edits and incoming_agent_count else None
+                int(request.max_edits / incoming_agent_count) if request.max_edits and incoming_agent_count > 0 else None
             )
             session_obj = DocumentSession(
                 document_id=doc_uuid,

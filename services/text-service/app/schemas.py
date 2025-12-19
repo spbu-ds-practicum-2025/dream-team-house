@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field
 from uuid import UUID
 
 
+class AgentRole(BaseModel):
+    """Role configuration for an agent"""
+    role_key: str
+    name: str
+    prompt: str
+
+
 class DocumentResponse(BaseModel):
     """Response model for document"""
     document_id: str
@@ -25,17 +32,10 @@ class DocumentResponse(BaseModel):
     total_versions: Optional[int] = None
     agent_count: Optional[int] = None
     max_edits_per_agent: Optional[int] = None
-    agent_roles: Optional[List["AgentRole"]] = None
+    agent_roles: Optional[List[AgentRole]] = None
 
     class Config:
         from_attributes = True
-
-
-class AgentRole(BaseModel):
-    """Role configuration for an agent"""
-    role_key: str
-    name: str
-    prompt: str
 
 
 class DocumentInitRequest(BaseModel):

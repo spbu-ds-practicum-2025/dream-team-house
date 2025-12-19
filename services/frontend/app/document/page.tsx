@@ -248,13 +248,11 @@ function DocumentPageContent() {
     selectedVersionRef.current = selectedVersion
   }, [selectedVersion])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Run once on mount to populate available documents
     fetchDocuments()
-  }, [])
+  }, [fetchDocuments])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (selectedDocumentId) {
       setSelectedVersion(null)
@@ -264,7 +262,7 @@ function DocumentPageContent() {
       fetchEdits()
       fetchVersions()
     }
-  }, [selectedDocumentId])
+  }, [fetchDocument, fetchDocuments, fetchEdits, fetchVersions, selectedDocumentId])
 
   useEffect(() => {
     const statusChangedToInactive =
@@ -288,8 +286,7 @@ function DocumentPageContent() {
       }, 3000)
       return () => clearInterval(interval)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, selectedDocumentId])
+  }, [autoRefresh, fetchDocument, fetchEdits, fetchVersions, selectedDocumentId])
 
   if (loading) {
     return (

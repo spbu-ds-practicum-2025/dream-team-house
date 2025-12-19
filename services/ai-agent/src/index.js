@@ -28,6 +28,7 @@ const TARGET_DOCUMENT_ID = process.env.DOCUMENT_ID || null;
 const CONFIGURED_MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;
+const DEFAULT_EXPANSION_PROMPT = 'Увеличивай объем текста, добавляя ценность, новые детали, примеры и связующие переходы без пустых повторов.';
 
 console.log('AI Agent starting...');
 console.log('Configuration:', {
@@ -164,7 +165,7 @@ async function submitEdit(operation, anchor, position, oldText, newText, tokensU
 // Generate edit using OpenAI
 async function generateEdit(documentText, chatContext) {
   const systemPrompt = `You are an AI agent working as "${activeRoleName}".
-Role focus: ${activeRolePrompt || 'Увеличивай объем текста, добавляя ценность и содержательные детали.'}
+Role focus: ${activeRolePrompt || DEFAULT_EXPANSION_PROMPT}
 
 Return a JSON object with this structure:
 {
