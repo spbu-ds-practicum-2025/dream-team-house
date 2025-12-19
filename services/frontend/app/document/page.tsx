@@ -75,6 +75,13 @@ export default function DocumentPage() {
   const searchParams = useSearchParams()
   const queryDocumentId = searchParams.get('documentId')
 
+  const ERROR_MESSAGES = {
+    document: 'Не удалось загрузить документ',
+    edits: 'Не удалось загрузить правки',
+    versions: 'Не удалось загрузить версии',
+    generic: 'Произошла ошибка при загрузке документа',
+  }
+
   const [documents, setDocuments] = useState<DocumentSummary[]>([])
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(queryDocumentId)
   const [document, setDocument] = useState<Document | null>(null)
@@ -115,13 +122,13 @@ export default function DocumentPage() {
     try {
       const response = await fetch(`${API_URL}/api/document/current?document_id=${selectedDocumentId}`)
       if (!response.ok) {
-        throw new Error('Не удалось загрузить документ')
+        throw new Error(ERROR_MESSAGES.document)
       }
       const data = await response.json()
       setDocument(data)
       setError('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке документа')
+      setError(err instanceof Error ? err.message : ERROR_MESSAGES.generic)
     } finally {
       setLoading(false)
     }
@@ -132,7 +139,7 @@ export default function DocumentPage() {
     try {
       const response = await fetch(`${API_URL}/api/edits?limit=20&document_id=${selectedDocumentId}`)
       if (!response.ok) {
-        throw new Error('Не удалось загрузить правки')
+        throw new Error(ERROR_MESSAGES.edits)
       }
       const data = await response.json()
       setEdits(data)
@@ -146,7 +153,7 @@ export default function DocumentPage() {
     try {
       const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions?limit=50`)
       if (!response.ok) {
-        throw new Error('Не удалось загрузить версии')
+        throw new Error(ERROR_MESSAGES.versions)
       }
       const data: VersionItem[] = await response.json()
       setVersions(data)

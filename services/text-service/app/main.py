@@ -79,7 +79,7 @@ async def resolve_document_session(
     """Get document session either by id or latest (optionally active only)."""
     query = select(DocumentSession)
     if document_id:
-        query = query.where(DocumentSession.document_id == uuid.UUID(str(document_id)))
+        query = query.where(DocumentSession.document_id == uuid.UUID(document_id))
     else:
         query = query.order_by(desc(DocumentSession.created_at))
         if not include_inactive:
@@ -198,7 +198,7 @@ async def get_document_versions(
     db: AsyncSession = Depends(get_db),
 ):
     """Get list of document versions (latest first)."""
-    doc_uuid = uuid.UUID(str(document_id))
+    doc_uuid = uuid.UUID(document_id)
     result = await db.execute(
         select(Document)
         .where(Document.document_id == doc_uuid)
@@ -223,7 +223,7 @@ async def get_version_diff(
     db: AsyncSession = Depends(get_db),
 ):
     """Return diff between requested version and previous (or provided) version."""
-    doc_uuid = uuid.UUID(str(document_id))
+    doc_uuid = uuid.UUID(document_id)
     target_result = await db.execute(
         select(Document).where(
             Document.document_id == doc_uuid, Document.version == version
@@ -271,7 +271,7 @@ async def stop_document(
         raise HTTPException(status_code=404, detail="Document not found")
 
     doc = await get_latest_document(db, session_obj.document_id)
-    if session_obj.status != DocumentStatus.STOPPED and session_obj.status != DocumentStatus.FINALIZED:
+    if session_obj.status not in (DocumentStatus.STOPPED, DocumentStatus.FINALIZED):
         session_obj.status = DocumentStatus.STOPPED
         session_obj.finished_at = datetime.utcnow()
         session_obj.final_version = doc.version if doc else session_obj.final_version
@@ -593,7 +593,7 @@ async def get_edits(
     """Get list of edits with pagination"""
     query = select(Edit).order_by(desc(Edit.created_at))
     if document_id:
-        query = query.where(Edit.document_id == uuid.UUID(str(document_id)))
+        query = query.where(Edit.document_id == uuid.UUID(document_id))
 
     result = await db.execute(query.limit(limit).offset(offset))
     edits = result.scalars().all()
@@ -619,7 +619,7 @@ async def replication_sync(
 ):
     """Accept replication message from another node"""
     try:
-        doc_uuid = uuid.UUID(str(request.document_id))
+        doc_uuid = uuid.UUID(request.document_id)
 
         # Ensure session exists
         def safe_status(value: Optional[str]) -> DocumentStatus:
@@ -728,7 +728,7 @@ async def replication_catchup(
     db: AsyncSession = Depends(get_db),
 ):
     """Get versions for node recovery"""
-    doc_uuid = uuid.UUID(str(document_id))
+    doc_uuid = uuid.UUID(document_id)
     result = await db.execute(
         select(Document)
         .where(Document.document_id == doc_uuid, Document.version > since_version)

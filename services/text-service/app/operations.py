@@ -4,6 +4,7 @@ Based on multi_agent_editor_demo_Version2.py
 """
 from typing import Optional, Tuple, List, Dict
 import difflib
+import re
 from app.schemas import EditRequest
 
 # Text length limits
@@ -133,14 +134,15 @@ def build_diff_segments(old_text: str, new_text: str) -> List[Dict[str, str]]:
     Replace operations emit a delete (old) and replace (new) segment
     so the UI can render removals in red and replacements in yellow.
     """
-    old_words = old_text.split()
-    new_words = new_text.split()
-    matcher = difflib.SequenceMatcher(a=old_words, b=new_words)
+    # Tokenize preserving whitespace chunks so we don't lose formatting
+    old_tokens = re.findall(r'\S+|\s+', old_text)
+    new_tokens = re.findall(r'\S+|\s+', new_text)
+    matcher = difflib.SequenceMatcher(a=old_tokens, b=new_tokens)
     segments: List[Dict[str, str]] = []
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        old_chunk = " ".join(old_words[i1:i2])
-        new_chunk = " ".join(new_words[j1:j2])
+        old_chunk = "".join(old_tokens[i1:i2])
+        new_chunk = "".join(new_tokens[j1:j2])
 
         if tag == "equal":
             if new_chunk:

@@ -261,8 +261,8 @@ class TestBuildDiffSegments:
         segments = build_diff_segments(old, new)
 
         # Should keep greeting, add brave and new
-        assert {"type": "equal", "text": "Hello"} in segments
-        assert {"type": "insert", "text": "brave new"} in segments
+        assert any(s["type"] == "equal" and s["text"].startswith("Hello") for s in segments)
+        assert any(s["type"] == "insert" and "brave new" in s["text"] for s in segments)
 
     def test_diff_replace_marks_delete_and_replace(self):
         old = "Old text here"
