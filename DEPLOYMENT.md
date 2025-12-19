@@ -76,6 +76,11 @@ Example: `https://orv-frontend.vitasha.ru`
 - HTTP → HTTPS redirect
 - Renewal handled by Traefik
 
+### Dynamic Configuration
+- Traefik routes are generated from `services/traefik/dynamic.yml.template` during deployment
+- Domain names are substituted from GitHub Secrets to ensure consistency
+- The generated `dynamic.yml` is not committed to the repository
+
 ### Data Persistence
 Volumes (preserved across restarts):
 - `postgres-text-a-data`
