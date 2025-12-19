@@ -47,6 +47,9 @@ jobs:
 
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+
+          POSTGRES_TEXT_PASSWORD: ${{ secrets.POSTGRES_TEXT_PASSWORD }}
+          POSTGRES_ANALYTICS_PASSWORD: ${{ secrets.POSTGRES_ANALYTICS_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -76,6 +79,8 @@ jobs:
           ANALYTICS_SERVICE_DOMAIN=${ANALYTICS_SERVICE_DOMAIN}
           CHAT_SERVICE_DOMAIN=${CHAT_SERVICE_DOMAIN}
           FRONTEND_DOMAIN=${FRONTEND_DOMAIN}
+          POSTGRES_TEXT_PASSWORD=${POSTGRES_TEXT_PASSWORD}
+          POSTGRES_ANALYTICS_PASSWORD=${POSTGRES_ANALYTICS_PASSWORD}
           EOF
 
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} env_file "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/.env
@@ -90,14 +95,8 @@ jobs:
           source .env || true
           : "${CERTBOT_EMAIL:?CERTBOT_EMAIL is required}"
           : "${FRONTEND_DOMAIN:?FRONTEND_DOMAIN is required}"
-
-          # Generate database passwords if not exists in .env
-          if ! grep -q "^POSTGRES_TEXT_PASSWORD=" .env 2>/dev/null; then
-            echo "POSTGRES_TEXT_PASSWORD=textservice_password" >> .env
-          fi
-          if ! grep -q "^POSTGRES_ANALYTICS_PASSWORD=" .env 2>/dev/null; then
-            echo "POSTGRES_ANALYTICS_PASSWORD=analytics_password" >> .env
-          fi
+          : "${POSTGRES_TEXT_PASSWORD:?POSTGRES_TEXT_PASSWORD is required}"
+          : "${POSTGRES_ANALYTICS_PASSWORD:?POSTGRES_ANALYTICS_PASSWORD is required}"
 
           echo "=== Docker versions ==="
           docker --version
