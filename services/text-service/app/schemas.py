@@ -1,6 +1,7 @@
 """
 Pydantic schemas for request/response validation
 """
+from __future__ import annotations
 from datetime import datetime
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
@@ -22,17 +23,30 @@ class DocumentResponse(BaseModel):
     finished_at: Optional[datetime] = None
     final_version: Optional[int] = None
     total_versions: Optional[int] = None
+    agent_count: Optional[int] = None
+    max_edits_per_agent: Optional[int] = None
+    agent_roles: Optional[List["AgentRole"]] = None
 
     class Config:
         from_attributes = True
 
 
+class AgentRole(BaseModel):
+    """Role configuration for an agent"""
+    role_key: str
+    name: str
+    prompt: str
+
+
 class DocumentInitRequest(BaseModel):
     """Request to initialize a new document"""
     topic: str
-    initial_text: str
+    initial_text: Optional[str] = ""
     mode: Optional[Literal["light", "pro"]] = "light"
     max_edits: Optional[int] = 3
+    max_edits_per_agent: Optional[int] = None
+    agent_count: Optional[int] = None
+    agent_roles: Optional[List[AgentRole]] = None
     token_budget: Optional[int] = 50000
 
 
@@ -88,6 +102,9 @@ class ReplicationSyncRequest(BaseModel):
     mode: Optional[str] = None
     status: Optional[str] = None
     max_edits: Optional[int] = None
+    max_edits_per_agent: Optional[int] = None
+    agent_count: Optional[int] = None
+    agent_roles: Optional[List[AgentRole]] = None
     token_budget: Optional[int] = None
     token_used: Optional[int] = None
     final_version: Optional[int] = None

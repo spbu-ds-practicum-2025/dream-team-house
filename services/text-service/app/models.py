@@ -4,7 +4,7 @@ Database models for Text Service
 from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, Enum, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, Enum, Index, UniqueConstraint, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -65,6 +65,18 @@ class Document(Base):
         Index('idx_documents_version', 'document_id', 'version', postgresql_using='btree'),
         UniqueConstraint('document_id', 'version', name='uq_document_version'),
     )
+
+
+class DocumentSettings(Base):
+    """Per-document settings such as agent roles"""
+    __tablename__ = "document_settings"
+
+    document_id = Column(UUID(as_uuid=True), primary_key=True)
+    agent_count = Column(Integer, nullable=False, default=1)
+    max_edits_per_agent = Column(Integer, nullable=False, default=1)
+    agent_roles = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Edit(Base):

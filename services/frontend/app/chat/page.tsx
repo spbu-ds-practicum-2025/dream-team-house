@@ -1,16 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 
 interface ChatMessage {
   message_id: string
   document_id?: string | null
   agent_id: string
+  agent_role?: string | null
   message: string
   timestamp: string
-  intent?: any
-  comment?: any
+  intent?: Record<string, unknown> | null
+  comment?: Record<string, unknown> | null
 }
 
 interface DocumentSummary {
@@ -30,7 +31,7 @@ export default function ChatPage() {
   const CHAT_URL = process.env.NEXT_PUBLIC_CHAT_URL || 'http://localhost'
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost'
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const params = new URLSearchParams({ limit: '100' })
       if (selectedDocumentId) {
@@ -48,9 +49,9 @@ export default function ChatPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [CHAT_URL, selectedDocumentId])
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/documents`)
       if (!response.ok) {
@@ -58,13 +59,10 @@ export default function ChatPage() {
       }
       const data = await response.json()
       setDocuments(data)
-      if (!selectedDocumentId && data.length > 0) {
-        setSelectedDocumentId(data[0].document_id)
-      }
     } catch (err) {
       console.error('Error fetching documents', err)
     }
-  }
+  }, [API_URL])
 
   useEffect(() => {
     fetchDocuments()
@@ -74,7 +72,7 @@ export default function ChatPage() {
       const interval = setInterval(fetchMessages, 2000)
       return () => clearInterval(interval)
     }
-  }, [autoRefresh, selectedDocumentId])
+  }, [autoRefresh, fetchDocuments, fetchMessages])
 
   if (loading) {
     return (
@@ -172,6 +170,11 @@ export default function ChatPage() {
                         <p className="text-sm font-medium text-gray-900">
                           {msg.agent_id}
                         </p>
+                        {msg.agent_role && (
+                          <p className="text-xs text-indigo-700 bg-indigo-50 inline-block px-2 py-1 rounded mt-1">
+                            {msg.agent_role}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-500">
                           {new Date(msg.timestamp).toLocaleString('ru-RU')}
                         </p>

@@ -66,6 +66,7 @@ class ChatMessageRequest(BaseModel):
     document_id: Optional[str] = None
     agent_id: str
     message: str
+    agent_role: Optional[str] = None
     intent: Optional[EditIntent] = None
     comment: Optional[EditComment] = None
 
@@ -81,6 +82,7 @@ class ChatMessage(BaseModel):
     document_id: Optional[str] = None
     message_id: str
     agent_id: str
+    agent_role: Optional[str] = None
     message: str
     timestamp: str
     intent: Optional[EditIntent] = None

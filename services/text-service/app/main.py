@@ -21,6 +21,7 @@ from app.models import (
     EditStatus,
     DocumentSession,
     DocumentStatus,
+    DocumentSettings,
 )
 from app.schemas import (
     DocumentResponse,
@@ -37,12 +38,82 @@ from app.schemas import (
     VersionDiffResponse,
     DocumentActionResponse,
     DiffSegment,
+    AgentRole,
 )
 from app.operations import apply_operation_to_text, validate_edit_request, build_diff_segments
 from app.replication import replicate_to_peers, send_analytics_event, NODE_ID
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+DEFAULT_ROLE_PRESETS = [
+    {
+        "role_key": "researcher",
+        "name": "Исследователь",
+        "prompt": "Добавляй факты, контекст и данные. Раскрывай тему глубже за счет примеров и ссылок на источники.",
+    },
+    {
+        "role_key": "narrator",
+        "name": "Нарративный писатель",
+        "prompt": "Увеличивай объем текста связными абзацами и плавными переходами между идеями, делая рассказ цельным.",
+    },
+    {
+        "role_key": "analyst",
+        "name": "Аналитик",
+        "prompt": "Расширяй аргументацию: добавляй выводы, сравнения и структурированные рассуждения без воды и повторов.",
+    },
+    {
+        "role_key": "strategist",
+        "name": "Стратег",
+        "prompt": "Предлагай практические шаги и планы. Раскрывай идеи через детальные рекомендации и сценарии применения.",
+    },
+    {
+        "role_key": "quality_guard",
+        "name": "Редактор качества",
+        "prompt": "Укрепляй стиль и чистоту текста, убирай явные повторы, добавляй уточнения и разъяснения для ясности.",
+    },
+    {
+        "role_key": "storyfinder",
+        "name": "Охотник за примерами",
+        "prompt": "Расширяй разделы конкретикой: кейсы, мини-истории, жизненные ситуации, которые иллюстрируют тезисы.",
+    },
+    {
+        "role_key": "visionary",
+        "name": "Визионер",
+        "prompt": "Добавляй содержательные идеи о будущем, трендах и последствиях, избегая пафоса и бессодержательных повторов.",
+    },
+    {
+        "role_key": "connector",
+        "name": "Связующий",
+        "prompt": "Добавляй мостики между разделами, показывай как части текста поддерживают друг друга, укрепляй логику.",
+    },
+    {
+        "role_key": "localizer",
+        "name": "Локализатор",
+        "prompt": "Адаптируй под аудиторию, добавляй отраслевые и культурные нюансы, расширяй примеры под контекст читателя.",
+    },
+    {
+        "role_key": "mentor",
+        "name": "Ментор",
+        "prompt": "Давай развёрнутые объяснения и советы, добавляй пошаговые инструкции, избегая пустых извинений и просьб.",
+    },
+]
+
+DEFAULT_ROLE_SETS = {
+    "light": ["researcher", "narrator", "analyst"],
+    "pro": [
+        "researcher",
+        "narrator",
+        "analyst",
+        "strategist",
+        "quality_guard",
+        "storyfinder",
+        "visionary",
+        "connector",
+        "localizer",
+        "mentor",
+    ],
+}
 
 
 @asynccontextmanager
@@ -97,6 +168,25 @@ async def get_budget(db: AsyncSession, document_id: uuid.UUID) -> Optional[Token
     return result.scalar_one_or_none()
 
 
+async def get_document_settings(db: AsyncSession, document_id: uuid.UUID) -> Optional[DocumentSettings]:
+    """Fetch document settings (roles, limits)."""
+    result = await db.execute(
+        select(DocumentSettings).where(DocumentSettings.document_id == document_id)
+    )
+    return result.scalar_one_or_none()
+
+
+def resolve_default_roles(mode: Optional[str], agent_count: int) -> List[dict]:
+    """Select default roles for mode and ensure list has requested length."""
+    preset_map = {role["role_key"]: role for role in DEFAULT_ROLE_PRESETS}
+    keys = DEFAULT_ROLE_SETS.get(mode or "light", DEFAULT_ROLE_SETS["light"])
+    roles: List[dict] = []
+    while len(roles) < agent_count:
+        key = keys[len(roles) % len(keys)]
+        roles.append(preset_map.get(key, DEFAULT_ROLE_PRESETS[0]))
+    return roles[:agent_count]
+
+
 async def get_latest_document(db: AsyncSession, document_id: uuid.UUID) -> Optional[Document]:
     """Fetch latest document version for session."""
     result = await db.execute(
@@ -112,8 +202,18 @@ def build_document_response(
     session: DocumentSession,
     doc: Document,
     budget: Optional[TokenBudget],
+    settings: Optional[DocumentSettings],
 ) -> DocumentResponse:
     """Compose document response with metadata."""
+    default_agent_count = 3 if session.mode == "light" else 10
+    agent_count = settings.agent_count if settings else default_agent_count
+    max_edits_per_agent = (
+        settings.max_edits_per_agent
+        if settings and settings.max_edits_per_agent
+        else (int(session.max_edits / agent_count) if session.max_edits else None)
+    )
+    agent_roles = settings.agent_roles if settings and settings.agent_roles else resolve_default_roles(session.mode, agent_count)
+
     return DocumentResponse(
         document_id=str(session.document_id),
         version=doc.version,
@@ -128,6 +228,9 @@ def build_document_response(
         finished_at=session.finished_at,
         final_version=session.final_version,
         total_versions=doc.version,
+        agent_count=agent_count,
+        max_edits_per_agent=max_edits_per_agent,
+        agent_roles=agent_roles,
     )
 
 
@@ -154,7 +257,8 @@ async def get_current_document(
         raise HTTPException(status_code=404, detail="No document versions found")
 
     budget = await get_budget(db, session_obj.document_id)
-    return build_document_response(session_obj, doc, budget)
+    settings = await get_document_settings(db, session_obj.document_id)
+    return build_document_response(session_obj, doc, budget, settings)
 
 
 @app.get("/api/documents", response_model=List[DocumentListItem])
@@ -317,11 +421,29 @@ async def init_document(
     db: AsyncSession = Depends(get_db),
 ):
     """Initialize new document (multiple sessions supported)"""
+    agent_count = request.agent_count or len(request.agent_roles or []) or (3 if request.mode == "light" else 10)
+    per_agent_edits = (
+        request.max_edits_per_agent
+        or request.max_edits
+        or (3 if request.mode == "light" else 10)
+    )
+
+    roles_payload = request.agent_roles or []
+    if not roles_payload:
+        roles_payload = [AgentRole(**role) for role in resolve_default_roles(request.mode, agent_count)]
+    elif len(roles_payload) < agent_count:
+        defaults = resolve_default_roles(request.mode, agent_count)
+        roles_payload = list(roles_payload) + [AgentRole(**defaults[i]) for i in range(len(roles_payload), agent_count)]
+    elif len(roles_payload) > agent_count:
+        roles_payload = roles_payload[:agent_count]
+
+    total_edits_limit = agent_count * per_agent_edits
+
     doc_session = DocumentSession(
         topic=request.topic,
         mode=request.mode,
         status=DocumentStatus.ACTIVE,
-        max_edits=request.max_edits or 3,
+        max_edits=total_edits_limit,
         token_budget=request.token_budget or 50000,
         token_used=0,
         created_at=datetime.utcnow(),
@@ -342,11 +464,19 @@ async def init_document(
     doc = Document(
         document_id=doc_session.document_id,
         version=1,
-        text=request.initial_text,
+        text=request.initial_text or "",
         timestamp=datetime.utcnow(),
         edit_id=None,
     )
     db.add(doc)
+
+    settings = DocumentSettings(
+        document_id=doc_session.document_id,
+        agent_count=agent_count,
+        max_edits_per_agent=per_agent_edits,
+        agent_roles=[role.model_dump() if isinstance(role, AgentRole) else role for role in roles_payload],
+    )
+    db.add(settings)
     await db.commit()
     await db.refresh(doc_session)
 
@@ -364,6 +494,8 @@ async def init_document(
                 "node_id": NODE_ID,
                 "mode": request.mode,
                 "token_budget": request.token_budget,
+                "agent_count": agent_count,
+                "max_edits_per_agent": per_agent_edits,
                 "document_id": str(doc_session.document_id),
             },
         }
@@ -375,6 +507,9 @@ async def init_document(
         "mode": doc_session.mode,
         "status": doc_session.status.value,
         "max_edits": doc_session.max_edits,
+        "max_edits_per_agent": per_agent_edits,
+        "agent_count": agent_count,
+        "agent_roles": settings.agent_roles,
         "token_budget": doc_session.token_budget,
         "final_version": doc_session.final_version,
     }
@@ -550,11 +685,16 @@ async def submit_edit(
             )
 
         # Replicate to peers (async, don't wait)
+        settings = await get_document_settings(db, session_obj.document_id)
+
         session_metadata = {
             "topic": session_obj.topic,
             "mode": session_obj.mode,
             "status": session_obj.status.value,
             "max_edits": session_obj.max_edits,
+            "max_edits_per_agent": settings.max_edits_per_agent if settings else None,
+            "agent_count": settings.agent_count if settings else None,
+            "agent_roles": settings.agent_roles if settings else None,
             "token_budget": session_obj.token_budget,
             "final_version": session_obj.final_version,
         }
@@ -634,12 +774,16 @@ async def replication_sync(
         )
         if not session_obj:
             session_status = safe_status(request.status)
+            incoming_agent_count = request.agent_count or (len(request.agent_roles or []) or (3 if request.mode == "light" else 10))
+            incoming_max_per_agent = request.max_edits_per_agent or (
+                int(request.max_edits / incoming_agent_count) if request.max_edits and incoming_agent_count else None
+            )
             session_obj = DocumentSession(
                 document_id=doc_uuid,
                 topic=request.topic or "replicated",
                 mode=request.mode,
                 status=session_status,
-                max_edits=request.max_edits or 0,
+                max_edits=request.max_edits or (incoming_agent_count * (incoming_max_per_agent or 0)),
                 token_budget=request.token_budget or 0,
                 token_used=request.token_used or 0,
                 final_version=request.final_version,
@@ -657,11 +801,23 @@ async def replication_sync(
                         updated_at=request.timestamp,
                     )
                 )
+            db.add(
+                DocumentSettings(
+                    document_id=doc_uuid,
+                    agent_count=incoming_agent_count,
+                    max_edits_per_agent=incoming_max_per_agent or 0,
+                    agent_roles=request.agent_roles,
+                    created_at=request.timestamp,
+                    updated_at=request.timestamp,
+                )
+            )
         else:
             if request.status:
                 session_obj.status = safe_status(request.status)
             if request.final_version is not None:
                 session_obj.final_version = request.final_version
+            if request.max_edits is not None:
+                session_obj.max_edits = request.max_edits
             if request.token_used is not None:
                 session_obj.token_used = request.token_used
                 await db.execute(
@@ -669,6 +825,27 @@ async def replication_sync(
                     .where(TokenBudget.document_id == doc_uuid)
                     .values(
                         total_tokens=request.token_used,
+                        updated_at=request.timestamp,
+                    )
+                )
+            settings = await get_document_settings(db, doc_uuid)
+            incoming_agent_count = request.agent_count or (settings.agent_count if settings else None)
+            if settings:
+                if request.agent_count:
+                    settings.agent_count = request.agent_count
+                if request.max_edits_per_agent:
+                    settings.max_edits_per_agent = request.max_edits_per_agent
+                if request.agent_roles:
+                    settings.agent_roles = request.agent_roles
+            else:
+                inferred_count = incoming_agent_count or (len(request.agent_roles or []) or (3 if request.mode == "light" else 10))
+                db.add(
+                    DocumentSettings(
+                        document_id=doc_uuid,
+                        agent_count=inferred_count,
+                        max_edits_per_agent=request.max_edits_per_agent or 0,
+                        agent_roles=request.agent_roles,
+                        created_at=request.timestamp,
                         updated_at=request.timestamp,
                     )
                 )

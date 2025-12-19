@@ -89,6 +89,8 @@ async def post_message(
         }
         if request.document_id:
             message_data["document_id"] = request.document_id
+        if request.agent_role:
+            message_data["agent_role"] = request.agent_role
         
         # Add structured entities if present
         if request.intent:
@@ -179,6 +181,7 @@ async def get_messages(
                 document_id=msg_data.get("document_id"),
                 message_id=msg_id,
                 agent_id=msg_data.get("agent_id", "unknown"),
+                agent_role=msg_data.get("agent_role"),
                 message=msg_data.get("message", ""),
                 timestamp=msg_data.get("timestamp", ""),
                 intent=intent,

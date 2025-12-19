@@ -87,6 +87,9 @@ async def replicate_to_node(
                 "mode": session_metadata.get("mode"),
                 "status": session_metadata.get("status"),
                 "max_edits": session_metadata.get("max_edits"),
+                "max_edits_per_agent": session_metadata.get("max_edits_per_agent"),
+                "agent_count": session_metadata.get("agent_count"),
+                "agent_roles": session_metadata.get("agent_roles"),
                 "token_budget": session_metadata.get("token_budget"),
                 "final_version": session_metadata.get("final_version"),
             }
