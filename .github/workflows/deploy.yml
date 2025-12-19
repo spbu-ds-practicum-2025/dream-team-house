@@ -76,9 +76,10 @@ jobs:
               services/traefik/dynamic.yml.template > services/traefik/dynamic.yml
 
           # Validate all placeholders were substituted
-          if grep -q "__.*__" services/traefik/dynamic.yml; then
+          remaining_placeholders=$(grep "__.*__" services/traefik/dynamic.yml || true)
+          if [ -n "$remaining_placeholders" ]; then
             echo "ERROR: dynamic.yml still contains placeholder values!"
-            grep "__.*__" services/traefik/dynamic.yml
+            echo "$remaining_placeholders"
             exit 1
           fi
 
