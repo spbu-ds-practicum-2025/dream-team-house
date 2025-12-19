@@ -25,9 +25,10 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.proxyapi.ru/
 // Generate secure agent ID
 const AGENT_ID = `agent-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 const TARGET_DOCUMENT_ID = process.env.DOCUMENT_ID || null;
-const MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
+const CONFIGURED_MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;
+const DEFAULT_EXPANSION_PROMPT = 'Увеличивай объем текста, добавляя ценность, новые детали, примеры и связующие переходы без пустых повторов.';
 
 console.log('AI Agent starting...');
 console.log('Configuration:', {
@@ -36,7 +37,7 @@ console.log('Configuration:', {
   textServiceUrl: TEXT_SERVICE_URL,
   chatServiceUrl: CHAT_SERVICE_URL,
   documentId: TARGET_DOCUMENT_ID,
-  maxEdits: MAX_EDITS,
+  maxEdits: CONFIGURED_MAX_EDITS,
   cycleDelay: CYCLE_DELAY_MS,
   hasOpenAiKey: !!OPENAI_API_KEY
 });
@@ -51,6 +52,10 @@ const openai = new OpenAI({
 let completedEdits = 0;
 let lastChatTimestamp = null;
 let isRunning = true;
+let maxEditsAllowed = CONFIGURED_MAX_EDITS;
+let activeRoleName = AGENT_ROLE;
+let activeRolePrompt = '';
+let agentRolesFromDocument = [];
 
 // Retry with exponential backoff
 async function retryWithBackoff(fn, retries = MAX_RETRIES) {
@@ -70,6 +75,16 @@ async function retryWithBackoff(fn, retries = MAX_RETRIES) {
 // Sleep helper
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function hashString(input) {
+  return input.split('').reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 7);
+}
+
+function selectAgentRole(agentRoles = []) {
+  if (!agentRoles.length) return null;
+  const index = hashString(AGENT_ID) % agentRoles.length;
+  return agentRoles[index];
 }
 
 // Get current document
@@ -103,13 +118,16 @@ async function getChatMessages(since = null) {
 }
 
 // Post chat message
-async function postChatMessage(message, intent = null, comment = null) {
+async function postChatMessage(message, intent = null, comment = null, role = activeRoleName) {
   const data = {
     agent_id: AGENT_ID,
     message,
   };
   if (TARGET_DOCUMENT_ID) {
     data.document_id = TARGET_DOCUMENT_ID;
+  }
+  if (role) {
+    data.agent_role = role;
   }
   
   if (intent) data.intent = intent;
@@ -146,8 +164,8 @@ async function submitEdit(operation, anchor, position, oldText, newText, tokensU
 
 // Generate edit using OpenAI
 async function generateEdit(documentText, chatContext) {
-  const systemPrompt = `You are an AI agent with role: "${AGENT_ROLE}".
-Your task is to suggest a small, local improvement to the document.
+  const systemPrompt = `You are an AI agent working as "${activeRoleName}".
+Role focus: ${activeRolePrompt || DEFAULT_EXPANSION_PROMPT}
 
 Return a JSON object with this structure:
 {
@@ -160,14 +178,15 @@ Return a JSON object with this structure:
 }
 
 Rules:
+- Prioritize INSERT or REPLACE that expand content with new paragraphs, facts, transitions, or applied insights.
+- Keep tone professional; avoid pleading phrases or repetitive emphasis.
+- Anchor must exist in the document exactly; keep changes coherent with surrounding text.
+- Each edit should feel like one meaningful cycle, not scattered micro-changes.
 - For INSERT: specify anchor, position (before/after), and new_text
 - For REPLACE: specify anchor (or old_text), and new_text
-- For DELETE: specify anchor (or old_text)
-- Make small, incremental changes
-- Anchor must exist in the document exactly
-- Keep changes localized`;
+- For DELETE: specify anchor (or old_text) and use only when removing clear redundancy.`;
 
-  const userPrompt = `Current document:\n${documentText}\n\nRecent chat:\n${chatContext}\n\nSuggest one small improvement.`;
+  const userPrompt = `Current document:\n${documentText}\n\nRecent chat:\n${chatContext}\n\nPropose one coherent improvement that meaningfully expands the text (more details, examples, bridges). Avoid filler or repeating pleas.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -199,13 +218,16 @@ function buildChatSummary(messages, maxMessages = 20) {
   const recent = messages.slice(-maxMessages);
   if (recent.length === 0) return '(no messages)';
   
-  return recent.map(m => `${m.agent_id}: ${m.message}`).join('\n');
+  return recent.map(m => {
+    const roleLabel = m.agent_role ? `[${m.agent_role}] ` : '';
+    return `${roleLabel}${m.agent_id}: ${m.message}`;
+  }).join('\n');
 }
 
 // Main agent cycle
 async function agentCycle() {
   try {
-    console.log(`\n[${AGENT_ID}] === Starting edit cycle ${completedEdits + 1}/${MAX_EDITS} ===`);
+    console.log(`\n[${AGENT_ID}] === Starting edit cycle ${completedEdits + 1}/${maxEditsAllowed} ===`);
     
     // Step 1-2: Get document and chat
     console.log(`[${AGENT_ID}] Fetching document and chat...`);
@@ -232,6 +254,26 @@ async function agentCycle() {
       console.log(`[${AGENT_ID}] Document ${activeDocumentId} reached max edits (${document.max_edits}), stopping agent`);
       isRunning = false;
       await postChatMessage(`Stopping work: max edits ${document.max_edits} reached`);
+      return;
+    }
+
+    if (document.max_edits_per_agent) {
+      maxEditsAllowed = document.max_edits_per_agent;
+    }
+
+    if (Array.isArray(document.agent_roles) && document.agent_roles.length) {
+      agentRolesFromDocument = document.agent_roles;
+      const selectedRole = selectAgentRole(agentRolesFromDocument);
+      if (selectedRole) {
+        activeRoleName = selectedRole.name || selectedRole.role_key || activeRoleName;
+        activeRolePrompt = selectedRole.prompt || activeRolePrompt;
+      }
+    }
+
+    if (completedEdits >= maxEditsAllowed) {
+      console.log(`[${AGENT_ID}] Reached per-agent edit limit ${maxEditsAllowed}, stopping agent`);
+      isRunning = false;
+      await postChatMessage(`Достиг лимита правок (${maxEditsAllowed}) для роли ${activeRoleName}`);
       return;
     }
     
@@ -294,15 +336,16 @@ async function agentCycle() {
 
 // Main loop
 async function main() {
-  console.log(`[${AGENT_ID}] Agent starting with role: ${AGENT_ROLE}`);
+  console.log(`[${AGENT_ID}] Agent starting with role: ${activeRoleName}`);
   
   // Wait for a document to be available before starting work
   let documentExists = false;
+  let initialDocument = null;
   console.log(`[${AGENT_ID}] Waiting for document to be initialized...`);
   
   while (!documentExists && isRunning) {
     try {
-      await getCurrentDocument();
+      initialDocument = await getCurrentDocument();
       documentExists = true;
       console.log(`[${AGENT_ID}] Document found! Starting work...`);
     } catch (error) {
@@ -320,29 +363,43 @@ async function main() {
     console.log(`[${AGENT_ID}] Agent stopped before document was found.`);
     return;
   }
+
+  if (initialDocument) {
+    if (initialDocument.max_edits_per_agent) {
+      maxEditsAllowed = initialDocument.max_edits_per_agent;
+    }
+    if (Array.isArray(initialDocument.agent_roles) && initialDocument.agent_roles.length) {
+      agentRolesFromDocument = initialDocument.agent_roles;
+      const selectedRole = selectAgentRole(agentRolesFromDocument);
+      if (selectedRole) {
+        activeRoleName = selectedRole.name || selectedRole.role_key || activeRoleName;
+        activeRolePrompt = selectedRole.prompt || activeRolePrompt;
+      }
+    }
+  }
   
   // Initial greeting - only post once document exists
   try {
-    await postChatMessage(`Hello! I'm ${AGENT_ID}, role: ${AGENT_ROLE}. Starting work...`);
+    await postChatMessage(`Hello! I'm ${AGENT_ID}, role: ${activeRoleName}. Starting work...`);
   } catch (error) {
     console.error(`[${AGENT_ID}] Failed to post initial message:`, error.message);
   }
   
   // Main loop
-  while (isRunning && completedEdits < MAX_EDITS) {
+  while (isRunning && completedEdits < maxEditsAllowed) {
     await agentCycle();
     
-    if (isRunning && completedEdits < MAX_EDITS) {
+    if (isRunning && completedEdits < maxEditsAllowed) {
       console.log(`[${AGENT_ID}] Waiting ${CYCLE_DELAY_MS}ms before next cycle...`);
       await sleep(CYCLE_DELAY_MS);
     }
   }
   
-  console.log(`[${AGENT_ID}] Agent finished. Completed edits: ${completedEdits}/${MAX_EDITS}`);
+  console.log(`[${AGENT_ID}] Agent finished. Completed edits: ${completedEdits}/${maxEditsAllowed}`);
   
   // Goodbye message
   try {
-    await postChatMessage(`Finished. Completed ${completedEdits} edits. Goodbye!`);
+    await postChatMessage(`Finished. Completed ${completedEdits} edits as ${activeRoleName}. Goodbye!`);
   } catch (error) {
     console.error(`[${AGENT_ID}] Failed to post goodbye message:`, error.message);
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -26,11 +26,14 @@ interface Document {
   mode?: string
   status?: string
   max_edits?: number
+  max_edits_per_agent?: number
   token_budget?: number
   token_used?: number
   finished_at?: string | null
   final_version?: number | null
   total_versions?: number
+  agent_count?: number
+  agent_roles?: AgentRole[]
 }
 
 interface Edit {
@@ -53,6 +56,12 @@ interface DiffSegment {
   text: string
 }
 
+interface AgentRole {
+  role_key: string
+  name: string
+  prompt: string
+}
+
 interface VersionDiff {
   document_id: string
   target_version: number
@@ -69,6 +78,15 @@ const statusStyles: Record<string, string> = {
   completed: 'bg-blue-100 text-blue-800',
   stopped: 'bg-red-100 text-red-800',
   finalized: 'bg-purple-100 text-purple-800',
+}
+
+const hashString = (value: string) =>
+  value.split('').reduce((acc, char) => ((acc * 31 + char.charCodeAt(0)) >>> 0), 7)
+
+const getRoleForAgent = (agentId: string, roles?: AgentRole[] | null) => {
+  if (!roles || roles.length === 0) return null
+  const index = hashString(agentId) % roles.length
+  return roles[index]
 }
 
 function DocumentPageContent() {
@@ -96,6 +114,7 @@ function DocumentPageContent() {
   const [activeTab, setActiveTab] = useState<TabKey>('text')
   const [statusNotice, setStatusNotice] = useState('')
 
+  const selectedVersionRef = useRef<number | null>(null)
   const previousStatusRef = useRef<string | null>(null)
   const selectedVersionMeta = selectedVersion
     ? versions.find((v) => v.version === selectedVersion)
@@ -103,7 +122,7 @@ function DocumentPageContent() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost'
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/documents`)
       if (!response.ok) {
@@ -118,9 +137,9 @@ function DocumentPageContent() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка загрузки списка документов')
     }
-  }
+  }, [API_URL, queryDocumentId, selectedDocumentId])
 
-  const fetchDocument = async () => {
+  const fetchDocument = useCallback(async () => {
     if (!selectedDocumentId) return
     try {
       const response = await fetch(`${API_URL}/api/document/current?document_id=${selectedDocumentId}`)
@@ -135,12 +154,12 @@ function DocumentPageContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, ERROR_MESSAGES.document, ERROR_MESSAGES.generic, selectedDocumentId])
 
-  const fetchEdits = async () => {
+  const fetchEdits = useCallback(async () => {
     if (!selectedDocumentId) return
     try {
-      const response = await fetch(`${API_URL}/api/edits?limit=20&document_id=${selectedDocumentId}`)
+      const response = await fetch(`${API_URL}/api/edits?limit=200&document_id=${selectedDocumentId}`)
       if (!response.ok) {
         throw new Error(ERROR_MESSAGES.edits)
       }
@@ -149,33 +168,9 @@ function DocumentPageContent() {
     } catch (err) {
       console.error('Error fetching edits:', err)
     }
-  }
+  }, [API_URL, ERROR_MESSAGES.edits, selectedDocumentId])
 
-  const fetchVersions = async () => {
-    if (!selectedDocumentId) return
-    try {
-      const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions?limit=50`)
-      if (!response.ok) {
-        throw new Error(ERROR_MESSAGES.versions)
-      }
-      const data: VersionItem[] = await response.json()
-      setVersions(data)
-      const newestVersion = data[0]?.version ?? null
-      const nextSelected = selectedVersion && data.some((v) => v.version === selectedVersion)
-        ? selectedVersion
-        : newestVersion
-      setSelectedVersion(nextSelected)
-      if (nextSelected) {
-        fetchVersionDiff(nextSelected)
-      } else {
-        setVersionDiff(null)
-      }
-    } catch (err) {
-      console.error('Error fetching versions:', err)
-    }
-  }
-
-  const fetchVersionDiff = async (version: number | null) => {
+  const fetchVersionDiff = useCallback(async (version: number | null) => {
     if (!selectedDocumentId || !version) return
     setLoadingDiff(true)
     try {
@@ -190,17 +185,53 @@ function DocumentPageContent() {
     } finally {
       setLoadingDiff(false)
     }
-  }
+  }, [API_URL, selectedDocumentId])
+
+  const fetchVersions = useCallback(async (preserveSelection = false) => {
+    if (!selectedDocumentId) return
+    try {
+      const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions?limit=50`)
+      if (!response.ok) {
+        throw new Error(ERROR_MESSAGES.versions)
+      }
+      const data: VersionItem[] = await response.json()
+      setVersions(data)
+      const newestVersion = data[0]?.version ?? null
+      const currentSelected = preserveSelection ? selectedVersionRef.current : selectedVersion
+      const nextSelected = currentSelected && data.some((v) => v.version === currentSelected)
+        ? currentSelected
+        : newestVersion
+      setSelectedVersion(nextSelected)
+      if (nextSelected) {
+        fetchVersionDiff(nextSelected)
+      } else {
+        setVersionDiff(null)
+      }
+    } catch (err) {
+      console.error('Error fetching versions:', err)
+    }
+  }, [API_URL, ERROR_MESSAGES.versions, selectedDocumentId, selectedVersion, fetchVersionDiff])
+
+  const fetchVersionDiff = useCallback(async (version: number | null) => {
+    if (!selectedDocumentId || !version) return
+    setLoadingDiff(true)
+    try {
+      const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions/${version}/diff`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch diff')
+      }
+      const data = await response.json()
+      setVersionDiff(data)
+    } catch (err) {
+      console.error('Error fetching diff:', err)
+    } finally {
+      setLoadingDiff(false)
+    }
+  }, [API_URL, selectedDocumentId])
 
   const handleStopAgents = async () => {
     if (!selectedDocumentId) return
     await fetch(`${API_URL}/api/document/${selectedDocumentId}/stop`, { method: 'POST' })
-    fetchDocument()
-  }
-
-  const handleFinalize = async () => {
-    if (!selectedDocumentId) return
-    await fetch(`${API_URL}/api/document/${selectedDocumentId}/finalize`, { method: 'POST' })
     fetchDocument()
   }
 
@@ -214,17 +245,24 @@ function DocumentPageContent() {
   }
 
   useEffect(() => {
+    selectedVersionRef.current = selectedVersion
+  }, [selectedVersion])
+
+  useEffect(() => {
     // Run once on mount to populate available documents
     fetchDocuments()
-  }, [])
+  }, [fetchDocuments])
 
   useEffect(() => {
     if (selectedDocumentId) {
+      setSelectedVersion(null)
+      selectedVersionRef.current = null
+      setVersionDiff(null)
       fetchDocument()
       fetchEdits()
       fetchVersions()
     }
-  }, [selectedDocumentId])
+  }, [fetchDocument, fetchDocuments, fetchEdits, fetchVersions, selectedDocumentId])
 
   useEffect(() => {
     const statusChangedToInactive =
@@ -244,11 +282,11 @@ function DocumentPageContent() {
       const interval = setInterval(() => {
         fetchDocument()
         fetchEdits()
-        fetchVersions()
+        fetchVersions(true)
       }, 3000)
       return () => clearInterval(interval)
     }
-  }, [autoRefresh, selectedDocumentId])
+  }, [autoRefresh, fetchDocument, fetchEdits, fetchVersions, selectedDocumentId])
 
   if (loading) {
     return (
@@ -299,6 +337,15 @@ function DocumentPageContent() {
                 Тема: {document.topic} {document.mode ? `• Режим: ${document.mode}` : ''}
               </p>
             )}
+            {document?.agent_roles && document.agent_roles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {document.agent_roles.map((role) => (
+                  <span key={role.role_key} className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-full border border-indigo-100">
+                    {role.name}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-3 items-center">
             <select
@@ -322,13 +369,6 @@ function DocumentPageContent() {
             >
               Остановить агентов
             </button>
-            <button
-              onClick={handleFinalize}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
-              disabled={!selectedDocumentId}
-            >
-              Финальная версия
-            </button>
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -342,7 +382,7 @@ function DocumentPageContent() {
               onClick={() => {
                 fetchDocument()
                 fetchEdits()
-                fetchVersions()
+                fetchVersions(true)
               }}
               className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
             >
@@ -396,6 +436,7 @@ function DocumentPageContent() {
                         </div>
                         <div className="text-sm text-gray-600">
                           <p>Правок: {document.total_versions ? document.total_versions - 1 : 0}{document.max_edits ? ` / ${document.max_edits}` : ''}</p>
+                          <p>На агента: {document.max_edits_per_agent ?? '—'} · Агенты: {document.agent_count ?? '—'}</p>
                           <p>Токены: {document.token_used ?? 0}{document.token_budget ? ` / ${document.token_budget}` : ''}</p>
                         </div>
                       </div>
@@ -484,42 +525,81 @@ function DocumentPageContent() {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                История правок
+                История версий и правок
               </h2>
-              <div className="space-y-3">
-                {edits.length > 0 ? (
-                  edits.map((edit) => (
+              <div className="text-sm text-gray-600 mb-3">
+                Версий: {versions.length}{document?.total_versions ? ` / ${document.total_versions}` : ''}. Ожидается правок: {Math.max((document?.total_versions ?? 1) - 1, 0)}
+              </div>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {versions.length > 0 ? (
+                  versions.map((versionItem) => (
                     <div
-                      key={edit.edit_id}
-                      className="p-3 bg-gray-50 rounded-md border border-gray-200"
+                      key={versionItem.version}
+                      onClick={() => {
+                        setSelectedVersion(versionItem.version)
+                        fetchVersionDiff(versionItem.version)
+                      }}
+                      className={`p-3 rounded-md border cursor-pointer transition ${selectedVersion === versionItem.version ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-gray-50 hover:border-indigo-200'}`}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600">
-                          {edit.agent_id.substring(0, 12)}...
-                        </span>
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
-                            edit.status === 'accepted'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {edit.status}
-                        </span>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-gray-800">Версия {versionItem.version}</div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(versionItem.timestamp).toLocaleString('ru-RU')}
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-700">
-                        <strong>{edit.operation}</strong>
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Токенов: {edit.tokens_used}
-                      </p>
                     </div>
                   ))
                 ) : (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    Пока нет правок
+                    Пока нет версий
                   </p>
                 )}
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800">Последние правки</h3>
+                  <span className="text-xs text-gray-500">Показаны до {edits.length} записей</span>
+                </div>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {edits.length > 0 ? (
+                    edits.map((edit) => {
+                      const resolvedRole = getRoleForAgent(edit.agent_id, document?.agent_roles)
+                      return (
+                        <div
+                          key={edit.edit_id}
+                          className="p-3 bg-gray-50 rounded-md border border-gray-200"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-xs font-medium text-gray-600 flex flex-col gap-1">
+                              <span>{edit.agent_id.substring(0, 12)}...</span>
+                              {resolvedRole && <span className="inline-flex px-2 py-1 rounded bg-indigo-100 text-indigo-700">{resolvedRole.name}</span>}
+                            </div>
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-medium ${
+                                edit.status === 'accepted'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {edit.status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700">
+                            <strong>{edit.operation}</strong>
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Токенов: {edit.tokens_used}
+                          </p>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      Пока нет правок
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

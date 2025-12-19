@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts'
 
 interface Metrics {
   total_edits: number
@@ -19,8 +20,24 @@ export default function AnalyticsPage() {
   const [error, setError] = useState('')
 
   const ANALYTICS_URL = process.env.NEXT_PUBLIC_ANALYTICS_URL || 'http://localhost'
+  const tokenSeries = metrics?.token_usage_by_time.map((point) => ({
+    time: new Date(point.timestamp).toLocaleString('ru-RU', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    value: point.value,
+  })) ?? []
+  const activitySpark = metrics ? [
+    { name: 'Правки', value: metrics.total_edits },
+    { name: 'Агенты', value: metrics.active_agents },
+    { name: 'Правок/мин', value: Number(metrics.edits_per_minute.toFixed(2)) },
+  ] : []
+  const tokenChartData = tokenSeries.length ? tokenSeries : [{ time: '—', value: 0 }]
+  const activityData = activitySpark.length ? activitySpark : [{ name: 'Нет данных', value: 0 }]
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async () => {
     setLoading(true)
     try {
       const response = await fetch(`${ANALYTICS_URL}/api/analytics/metrics?period=${period}`)
@@ -35,11 +52,10 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false)
     }
-  }
-
+  }, [ANALYTICS_URL, period])
   useEffect(() => {
     fetchMetrics()
-  }, [period])
+  }, [fetchMetrics])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -176,35 +192,39 @@ export default function AnalyticsPage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Использование токенов
               </h2>
-              <div className="space-y-2">
-                {(() => {
-                  const maxValue = Math.max(...metrics.token_usage_by_time.map((p) => p.value), 1)
-                  return metrics.token_usage_by_time.map((point, index) => (
-                    <div key={index} className="flex items-center">
-                      <div className="w-48 text-sm text-gray-600">
-                        {new Date(point.timestamp).toLocaleString('ru-RU', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </div>
-                      <div className="flex-1 ml-4">
-                        <div className="bg-gray-200 rounded-full h-4">
-                          <div
-                            className="bg-indigo-600 h-4 rounded-full"
-                            style={{
-                              width: `${Math.min((point.value / maxValue) * 100, 100)}%`,
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div className="w-20 text-right text-sm font-medium text-gray-900">
-                        {point.value}
-                      </div>
-                    </div>
-                  ))
-                })()}
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={tokenChartData}>
+                    <defs>
+                      <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.35}/>
+                        <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.05}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="time" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="value" stroke="#4f46e5" fill="url(#colorTokens)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6 mt-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Пульс активности
+              </h2>
+              <div className="h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activityData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#818cf8" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
