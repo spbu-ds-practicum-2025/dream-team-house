@@ -1,42 +1,42 @@
 http:
   routers:
     frontend:
-      rule: "Host(`orv-frontend.vitasha.ru`)"
+      rule: "Host(`__FRONTEND_DOMAIN__`)"
       entryPoints: ["websecure"]
       tls:
         certResolver: letsencrypt
       service: frontend
 
     text-a:
-      rule: "Host(`text-service-a.vitasha.ru`)"
+      rule: "Host(`__TEXT_SERVICE_A_DOMAIN__`)"
       entryPoints: ["websecure"]
       tls:
         certResolver: letsencrypt
       service: text-a
 
     text-b:
-      rule: "Host(`text-service-b.vitasha.ru`)"
+      rule: "Host(`__TEXT_SERVICE_B_DOMAIN__`)"
       entryPoints: ["websecure"]
       tls:
         certResolver: letsencrypt
       service: text-b
 
     text-c:
-      rule: "Host(`text-service-c.vitasha.ru`)"
+      rule: "Host(`__TEXT_SERVICE_C_DOMAIN__`)"
       entryPoints: ["websecure"]
       tls:
         certResolver: letsencrypt
       service: text-c
 
     chat:
-      rule: "Host(`chat-service.vitasha.ru`)"
+      rule: "Host(`__CHAT_SERVICE_DOMAIN__`)"
       entryPoints: ["websecure"]
       tls:
         certResolver: letsencrypt
       service: chat
 
     analytics:
-      rule: "Host(`analytics-service.vitasha.ru`)"
+      rule: "Host(`__ANALYTICS_SERVICE_DOMAIN__`)"
       entryPoints: ["websecure"]
       tls:
         certResolver: letsencrypt

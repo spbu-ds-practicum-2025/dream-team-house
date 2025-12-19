@@ -16,7 +16,11 @@ Set these in: Repository → Settings → Secrets and variables → Actions → 
    - `DEPLOY_USER` - SSH username
    - `DEPLOY_PASS` - SSH password/key
 
-2. **Domains** (without https://):
+2. **Database Credentials**:
+   - `POSTGRES_TEXT_PASSWORD` - Password for text service PostgreSQL databases
+   - `POSTGRES_ANALYTICS_PASSWORD` - Password for analytics service PostgreSQL database
+
+3. **Domains** (without https://):
    - `TEXT_SERVICE_A_DOMAIN` - e.g., `text-service-a.vitasha.ru`
    - `TEXT_SERVICE_B_DOMAIN` - e.g., `text-service-b.vitasha.ru`
    - `TEXT_SERVICE_C_DOMAIN` - e.g., `text-service-c.vitasha.ru`
@@ -24,10 +28,10 @@ Set these in: Repository → Settings → Secrets and variables → Actions → 
    - `ANALYTICS_SERVICE_DOMAIN` - e.g., `analytics-service.vitasha.ru`
    - `FRONTEND_DOMAIN` - e.g., `orv-frontend.vitasha.ru`
 
-3. **OpenAI**:
+4. **OpenAI**:
    - `OPENAI_API_KEY` - Your OpenAI API key
 
-4. **SSL**:
+5. **SSL**:
    - `CERTBOT_EMAIL` - Email for Let's Encrypt notifications
 
 ### Deploy
@@ -71,6 +75,11 @@ Example: `https://orv-frontend.vitasha.ru`
 - Automatic via Let's Encrypt
 - HTTP → HTTPS redirect
 - Renewal handled by Traefik
+
+### Dynamic Configuration
+- Traefik routes are generated from `services/traefik/dynamic.yml.template` during deployment
+- Domain names are substituted from GitHub Secrets to ensure consistency
+- The generated `dynamic.yml` is not committed to the repository
 
 ### Data Persistence
 Volumes (preserved across restarts):
@@ -213,7 +222,7 @@ sudo ufw enable
 ```
 
 ### Database Passwords
-Automatically generated random passwords stored in `.env`
+Passwords are set via GitHub Secrets (`POSTGRES_TEXT_PASSWORD` and `POSTGRES_ANALYTICS_PASSWORD`) and propagated to the server during deployment. The same passwords are used by both the PostgreSQL containers and the application services that connect to them.
 
 ### SSL/TLS
 - Automatic via Let's Encrypt

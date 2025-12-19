@@ -1,2 +1,5 @@
 .vscode/
 .idea/
+
+# Generated files - created from templates during deployment
+services/traefik/dynamic.yml
