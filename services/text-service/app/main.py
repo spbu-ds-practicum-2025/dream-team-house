@@ -506,7 +506,8 @@ async def submit_edit(
         session_obj.updated_at = datetime.utcnow()
 
         # Mark as completed when max edits reached
-        if session_obj.max_edits and new_version - 1 >= session_obj.max_edits:
+        edits_applied = new_version - 1
+        if session_obj.max_edits and edits_applied >= session_obj.max_edits:
             session_obj.status = DocumentStatus.COMPLETED
             session_obj.finished_at = datetime.utcnow()
             session_obj.final_version = new_version

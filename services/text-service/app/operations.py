@@ -130,6 +130,8 @@ def build_diff_segments(old_text: str, new_text: str) -> List[Dict[str, str]]:
     """
     Build diff segments between two texts for highlighting.
     Uses word-level diff to keep output compact.
+    Replace operations emit a delete (old) and replace (new) segment
+    so the UI can render removals in red and replacements in yellow.
     """
     old_words = old_text.split()
     new_words = new_text.split()
@@ -137,8 +139,8 @@ def build_diff_segments(old_text: str, new_text: str) -> List[Dict[str, str]]:
     segments: List[Dict[str, str]] = []
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        old_chunk = " ".join(old_words[i1:i2]).strip()
-        new_chunk = " ".join(new_words[j1:j2]).strip()
+        old_chunk = " ".join(old_words[i1:i2])
+        new_chunk = " ".join(new_words[j1:j2])
 
         if tag == "equal":
             if new_chunk:

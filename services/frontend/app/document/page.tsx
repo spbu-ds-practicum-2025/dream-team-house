@@ -115,13 +115,13 @@ export default function DocumentPage() {
     try {
       const response = await fetch(`${API_URL}/api/document/current?document_id=${selectedDocumentId}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch document')
+        throw new Error('Не удалось загрузить документ')
       }
       const data = await response.json()
       setDocument(data)
       setError('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      setError(err instanceof Error ? err.message : 'Произошла ошибка при загрузке документа')
     } finally {
       setLoading(false)
     }
@@ -132,7 +132,7 @@ export default function DocumentPage() {
     try {
       const response = await fetch(`${API_URL}/api/edits?limit=20&document_id=${selectedDocumentId}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch edits')
+        throw new Error('Не удалось загрузить правки')
       }
       const data = await response.json()
       setEdits(data)
@@ -146,7 +146,7 @@ export default function DocumentPage() {
     try {
       const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions?limit=50`)
       if (!response.ok) {
-        throw new Error('Failed to fetch versions')
+        throw new Error('Не удалось загрузить версии')
       }
       const data: VersionItem[] = await response.json()
       setVersions(data)

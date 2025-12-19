@@ -63,6 +63,7 @@ class Document(Base):
 
     __table_args__ = (
         Index('idx_documents_version', 'document_id', 'version', postgresql_using='btree'),
+        UniqueConstraint('document_id', 'version', name='uq_document_version'),
     )
 
 

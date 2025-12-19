@@ -33,6 +33,7 @@ const MODES: Record<GenerationMode, ModeConfig> = {
 
 export default function Home() {
   const router = useRouter()
+  const REDIRECT_DELAY_MS = 1200
   const [topic, setTopic] = useState('')
   const [initialText, setInitialText] = useState('')
   const [mode, setMode] = useState<GenerationMode>('light')
@@ -70,8 +71,8 @@ export default function Home() {
       const data = await response.json()
       setSuccess(true)
       setTimeout(() => {
-        router.push(`/document?documentId=${data.document_id}`)
-      }, 1200)
+        router.push(`/document?documentId=${encodeURIComponent(data.document_id)}`)
+      }, REDIRECT_DELAY_MS)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
