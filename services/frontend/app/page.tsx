@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 
 type GenerationMode = 'light' | 'pro'
 
+const REDIRECT_DELAY_MS = 1200
+
 interface ModeConfig {
   name: string
   description: string
@@ -33,7 +35,6 @@ const MODES: Record<GenerationMode, ModeConfig> = {
 
 export default function Home() {
   const router = useRouter()
-  const REDIRECT_DELAY_MS = 1200
   const [topic, setTopic] = useState('')
   const [initialText, setInitialText] = useState('')
   const [mode, setMode] = useState<GenerationMode>('light')

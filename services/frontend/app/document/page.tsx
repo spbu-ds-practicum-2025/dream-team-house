@@ -214,8 +214,8 @@ export default function DocumentPage() {
   }
 
   useEffect(() => {
+    // Run once on mount to populate available documents
     fetchDocuments()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -224,7 +224,6 @@ export default function DocumentPage() {
       fetchEdits()
       fetchVersions()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDocumentId])
 
   useEffect(() => {

@@ -36,6 +36,7 @@ from app.schemas import (
     VersionItem,
     VersionDiffResponse,
     DocumentActionResponse,
+    DiffSegment,
 )
 from app.operations import apply_operation_to_text, validate_edit_request, build_diff_segments
 from app.replication import replicate_to_peers, send_analytics_event, NODE_ID
@@ -248,7 +249,7 @@ async def get_version_diff(
     base_text = base_doc.text if base_doc else ""
     segments = build_diff_segments(base_text, target_doc.text)
     if not segments and target_doc.text:
-        segments = [{"type": "insert", "text": target_doc.text}]
+        segments = [DiffSegment(type="insert", text=target_doc.text).model_dump()]
 
     return VersionDiffResponse(
         document_id=str(doc_uuid),
