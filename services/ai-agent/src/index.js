@@ -166,7 +166,7 @@ Rules:
       ],
       response_format: { type: 'json_object' },
       temperature: 0.7,
-      max_tokens: 500,
+      max_tokens: 5000,
     });
 
     const content = response.choices[0].message.content;
