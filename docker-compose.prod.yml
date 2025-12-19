@@ -8,11 +8,16 @@ services:
     environment:
       POSTGRES_DB: textservice
       POSTGRES_USER: textservice
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textservice_password}
+      POSTGRES_PASSWORD: ${POSTGRES_TEXT_PASSWORD:-textservice_password}
     volumes:
       - postgres-text-a-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U textservice -d textservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   postgres-text-b:
     image: postgres:15-alpine
@@ -20,11 +25,16 @@ services:
     environment:
       POSTGRES_DB: textservice
       POSTGRES_USER: textservice
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textservice_password}
+      POSTGRES_PASSWORD: ${POSTGRES_TEXT_PASSWORD:-textservice_password}
     volumes:
       - postgres-text-b-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U textservice -d textservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   postgres-text-c:
     image: postgres:15-alpine
@@ -32,11 +42,16 @@ services:
     environment:
       POSTGRES_DB: textservice
       POSTGRES_USER: textservice
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-textservice_password}
+      POSTGRES_PASSWORD: ${POSTGRES_TEXT_PASSWORD:-textservice_password}
     volumes:
       - postgres-text-c-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U textservice -d textservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # PostgreSQL database for Analytics Service
   postgres-analytics:
@@ -45,11 +60,16 @@ services:
     environment:
       POSTGRES_DB: analytics
       POSTGRES_USER: analytics
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-analytics_password}
+      POSTGRES_PASSWORD: ${POSTGRES_ANALYTICS_PASSWORD:-analytics_password}
     volumes:
       - postgres-analytics-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics -d analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # Redis for Chat Service
   redis:
@@ -60,6 +80,11 @@ services:
       - redis-data:/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # Text Service - Node A (Moscow)
   text-service-a:
@@ -68,13 +93,14 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: postgresql://textservice:${POSTGRES_PASSWORD:-textservice_password}@postgres-text-a:5432/textservice
+      DATABASE_URL: postgresql://textservice:${POSTGRES_TEXT_PASSWORD:-textservice_password}@postgres-text-a:5432/textservice
       NODE_ID: node-a
       NODE_NAME: Moscow
       ANALYTICS_URL: http://analytics-service:8000
       PEER_NODES: http://text-service-b:8000,http://text-service-c:8000
     depends_on:
-      - postgres-text-a
+      postgres-text-a:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -85,13 +111,14 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: postgresql://textservice:${POSTGRES_PASSWORD:-textservice_password}@postgres-text-b:5432/textservice
+      DATABASE_URL: postgresql://textservice:${POSTGRES_TEXT_PASSWORD:-textservice_password}@postgres-text-b:5432/textservice
       NODE_ID: node-b
       NODE_NAME: Saint-Petersburg
       ANALYTICS_URL: http://analytics-service:8000
       PEER_NODES: http://text-service-a:8000,http://text-service-c:8000
     depends_on:
-      - postgres-text-b
+      postgres-text-b:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -102,13 +129,14 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: postgresql://textservice:${POSTGRES_PASSWORD:-textservice_password}@postgres-text-c:5432/textservice
+      DATABASE_URL: postgresql://textservice:${POSTGRES_TEXT_PASSWORD:-textservice_password}@postgres-text-c:5432/textservice
       NODE_ID: node-c
       NODE_NAME: Novosibirsk
       ANALYTICS_URL: http://analytics-service:8000
       PEER_NODES: http://text-service-a:8000,http://text-service-b:8000
     depends_on:
-      - postgres-text-c
+      postgres-text-c:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -121,7 +149,8 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -132,9 +161,10 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: postgresql://analytics:${POSTGRES_PASSWORD:-analytics_password}@postgres-analytics:5432/analytics
+      DATABASE_URL: postgresql://analytics:${POSTGRES_ANALYTICS_PASSWORD:-analytics_password}@postgres-analytics:5432/analytics
     depends_on:
-      - postgres-analytics
+      postgres-analytics:
+        condition: service_healthy
     networks:
       - dream-team-network
 

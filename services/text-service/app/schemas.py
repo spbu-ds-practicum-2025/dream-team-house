@@ -21,6 +21,9 @@ class DocumentInitRequest(BaseModel):
     """Request to initialize a new document"""
     topic: str
     initial_text: str
+    mode: Optional[str] = "light"  # light or pro
+    max_edits: Optional[int] = 3
+    token_budget: Optional[int] = 50000
 
 
 class DocumentInitResponse(BaseModel):
