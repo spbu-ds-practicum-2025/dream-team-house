@@ -8,6 +8,7 @@ process.env.API_TOKEN = 'test-token';
 process.env.TEXT_SERVICE_URL = 'http://test-text-service';
 process.env.CHAT_SERVICE_URL = 'http://test-chat-service';
 process.env.OPENAI_API_KEY = 'test-key';
+process.env.DOCUMENT_ID = 'doc-xyz';
 process.env.MAX_EDITS = '2';
 process.env.CYCLE_DELAY_MS = '100';
 
@@ -17,6 +18,7 @@ describe('AI Agent Configuration', () => {
     expect(process.env.API_TOKEN).toBe('test-token');
     expect(process.env.TEXT_SERVICE_URL).toBe('http://test-text-service');
     expect(process.env.CHAT_SERVICE_URL).toBe('http://test-chat-service');
+    expect(process.env.DOCUMENT_ID).toBe('doc-xyz');
   });
 
   test('should have OpenAI API key', () => {

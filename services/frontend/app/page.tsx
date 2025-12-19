@@ -67,10 +67,11 @@ export default function Home() {
         throw new Error('Failed to initialize document')
       }
 
+      const data = await response.json()
       setSuccess(true)
       setTimeout(() => {
-        router.push('/document')
-      }, 1500)
+        router.push(`/document?documentId=${data.document_id}`)
+      }, 1200)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

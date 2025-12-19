@@ -24,6 +24,7 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.proxyapi.ru/
 
 // Generate secure agent ID
 const AGENT_ID = `agent-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+const TARGET_DOCUMENT_ID = process.env.DOCUMENT_ID || null;
 const MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;
@@ -34,6 +35,7 @@ console.log('Configuration:', {
   agentRole: AGENT_ROLE,
   textServiceUrl: TEXT_SERVICE_URL,
   chatServiceUrl: CHAT_SERVICE_URL,
+  documentId: TARGET_DOCUMENT_ID,
   maxEdits: MAX_EDITS,
   cycleDelay: CYCLE_DELAY_MS,
   hasOpenAiKey: !!OPENAI_API_KEY
@@ -73,8 +75,13 @@ function sleep(ms) {
 // Get current document
 async function getCurrentDocument() {
   const response = await retryWithBackoff(async () => {
+    const params = {};
+    if (TARGET_DOCUMENT_ID) {
+      params.document_id = TARGET_DOCUMENT_ID;
+    }
     return await axios.get(`${TEXT_SERVICE_URL}/api/document/current`, {
-      headers: { 'Authorization': `Bearer ${API_TOKEN}` }
+      headers: { 'Authorization': `Bearer ${API_TOKEN}` },
+      params,
     });
   });
   return response.data;
@@ -84,6 +91,7 @@ async function getCurrentDocument() {
 async function getChatMessages(since = null) {
   const params = {};
   if (since) params.since = since;
+  if (TARGET_DOCUMENT_ID) params.document_id = TARGET_DOCUMENT_ID;
   
   const response = await retryWithBackoff(async () => {
     return await axios.get(`${CHAT_SERVICE_URL}/api/chat/messages`, {
@@ -100,6 +108,9 @@ async function postChatMessage(message, intent = null, comment = null) {
     agent_id: AGENT_ID,
     message,
   };
+  if (TARGET_DOCUMENT_ID) {
+    data.document_id = TARGET_DOCUMENT_ID;
+  }
   
   if (intent) data.intent = intent;
   if (comment) data.comment = comment;
@@ -114,6 +125,7 @@ async function postChatMessage(message, intent = null, comment = null) {
 // Submit edit
 async function submitEdit(operation, anchor, position, oldText, newText, tokensUsed) {
   const data = {
+    document_id: TARGET_DOCUMENT_ID,
     agent_id: AGENT_ID,
     operation,
     anchor,
@@ -207,6 +219,21 @@ async function agentCycle() {
       }
       throw error;
     }
+
+    const activeDocumentId = document.document_id || TARGET_DOCUMENT_ID || 'unknown';
+    if (document.status && document.status !== 'active') {
+      console.log(`[${AGENT_ID}] Document ${activeDocumentId} status is ${document.status}, stopping agent`);
+      isRunning = false;
+      await postChatMessage(`Stopping work: document status ${document.status}`);
+      return;
+    }
+
+    if (document.max_edits && document.total_versions && (document.total_versions - 1) >= document.max_edits) {
+      console.log(`[${AGENT_ID}] Document ${activeDocumentId} reached max edits (${document.max_edits}), stopping agent`);
+      isRunning = false;
+      await postChatMessage(`Stopping work: max edits ${document.max_edits} reached`);
+      return;
+    }
     
     const chatMessages = await getChatMessages(lastChatTimestamp);
     
@@ -216,7 +243,7 @@ async function agentCycle() {
     
     const chatSummary = buildChatSummary(chatMessages);
     
-    console.log(`[${AGENT_ID}] Document version: ${document.version}, length: ${document.text.length} chars`);
+    console.log(`[${AGENT_ID}] Document ${activeDocumentId} version: ${document.version}, length: ${document.text.length} chars`);
     console.log(`[${AGENT_ID}] Chat messages: ${chatMessages.length}`);
     
     // Step 3: Generate edit via OpenAI

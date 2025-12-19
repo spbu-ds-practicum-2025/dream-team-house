@@ -19,6 +19,7 @@ class TestChatSchemas:
         assert request.message == "Working on introduction section"
         assert request.intent is None
         assert request.comment is None
+        assert request.document_id is None
     
     def test_chat_message_with_intent(self):
         """Test message with intent"""
@@ -36,11 +37,13 @@ class TestChatSchemas:
             agent_id="agent-01",
             message="Proposing to replace text",
             intent=intent,
+            document_id="doc-1",
         )
         
         assert request.intent is not None
         assert request.intent.intent_id == "intent-001"
         assert request.intent.operation == OperationType.REPLACE
+        assert request.document_id == "doc-1"
     
     def test_chat_message_with_comment(self):
         """Test message with comment"""

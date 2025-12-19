@@ -87,6 +87,8 @@ async def post_message(
             "message": request.message,
             "timestamp": datetime.utcnow().isoformat(),
         }
+        if request.document_id:
+            message_data["document_id"] = request.document_id
         
         # Add structured entities if present
         if request.intent:
@@ -119,6 +121,7 @@ async def post_message(
 @app.get("/api/chat/messages", response_model=List[ChatMessage])
 async def get_messages(
     since: Optional[str] = None,
+    document_id: Optional[str] = None,
     limit: int = 100,
     redis_client: redis.Redis = Depends(get_redis)
 ):
@@ -154,6 +157,8 @@ async def get_messages(
         # Parse messages
         result = []
         for msg_id, msg_data in messages:
+            if document_id and msg_data.get("document_id") != document_id:
+                continue
             # Parse structured entities
             intent = None
             comment = None
@@ -171,6 +176,7 @@ async def get_messages(
                     pass
             
             result.append(ChatMessage(
+                document_id=msg_data.get("document_id"),
                 message_id=msg_id,
                 agent_id=msg_data.get("agent_id", "unknown"),
                 message=msg_data.get("message", ""),
