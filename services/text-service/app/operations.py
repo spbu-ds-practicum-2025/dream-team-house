@@ -36,6 +36,8 @@ def apply_operation_to_text(text: str, edit: EditRequest) -> Tuple[str, bool]:
         return None
     
     if operation == "insert":
+        if not text and edit.new_text:
+            return edit.new_text, True
         # Insert new_text before or after anchor
         if not edit.anchor or not edit.new_text or not edit.position:
             return text, False

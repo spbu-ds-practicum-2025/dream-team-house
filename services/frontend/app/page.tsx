@@ -147,7 +147,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-indigo-600">Dream Team House</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-indigo-600">Dream Team House</h1>
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/document" className="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">
@@ -221,7 +221,7 @@ export default function Home() {
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Режим генерации
               </label>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col lg:flex-row gap-4">
                 {(Object.keys(MODES) as GenerationMode[]).map((modeKey) => {
                   const modeConfig = MODES[modeKey]
                   const isSelected = mode === modeKey
@@ -230,11 +230,11 @@ export default function Home() {
                       key={modeKey}
                       type="button"
                       onClick={() => handleModeChange(modeKey)}
-                      className={`p-4 border-2 rounded-lg text-left transition-all ${
-                        isSelected
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-200 hover:border-indigo-300'
-                      }`}
+                      className={`p-4 border-2 rounded-lg text-left transition-all w-full ${
+                         isSelected
+                           ? 'border-indigo-600 bg-indigo-50'
+                           : 'border-gray-200 hover:border-indigo-300'
+                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className={`font-semibold text-lg ${isSelected ? 'text-indigo-600' : 'text-gray-900'}`}>

@@ -85,6 +85,10 @@ class EditListItem(BaseModel):
     status: str
     tokens_used: int
     created_at: datetime
+    anchor: Optional[str] = None
+    position: Optional[str] = None
+    old_text: Optional[str] = None
+    new_text: Optional[str] = None
 
     class Config:
         from_attributes = True

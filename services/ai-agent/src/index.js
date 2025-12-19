@@ -29,6 +29,7 @@ const CONFIGURED_MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;
 const DEFAULT_EXPANSION_PROMPT = 'Увеличивай объем текста, добавляя ценность, новые детали, примеры и связующие переходы без пустых повторов.';
+const DEFAULT_ANCHOR_FALLBACK = 'Начало';
 
 console.log('AI Agent starting...');
 console.log('Configuration:', {
@@ -56,6 +57,7 @@ let maxEditsAllowed = CONFIGURED_MAX_EDITS;
 let activeRoleName = AGENT_ROLE;
 let activeRolePrompt = '';
 let agentRolesFromDocument = [];
+let cycleDelayMs = CYCLE_DELAY_MS;
 
 // Retry with exponential backoff
 async function retryWithBackoff(fn, retries = MAX_RETRIES) {
@@ -85,6 +87,15 @@ function selectAgentRole(agentRoles = []) {
   if (!agentRoles.length) return null;
   const index = hashString(AGENT_ID) % agentRoles.length;
   return agentRoles[index];
+}
+
+function updateCycleDelay(documentMode) {
+  const targetTotalMs = documentMode === 'pro' ? 90000 : 20000;
+  const computedDelay = Math.max(
+    1000,
+    Math.floor(targetTotalMs / Math.max(maxEditsAllowed || 1, 1))
+  );
+  cycleDelayMs = Math.max(CYCLE_DELAY_MS, computedDelay);
 }
 
 // Get current document
@@ -226,6 +237,14 @@ function buildChatSummary(messages, maxMessages = 20) {
 
 // Main agent cycle
 async function agentCycle() {
+  let cycleCounted = false;
+  const markCycleComplete = () => {
+    if (!cycleCounted) {
+      completedEdits += 1;
+      cycleCounted = true;
+    }
+  };
+
   try {
     console.log(`\n[${AGENT_ID}] === Starting edit cycle ${completedEdits + 1}/${maxEditsAllowed} ===`);
     
@@ -260,6 +279,7 @@ async function agentCycle() {
     if (document.max_edits_per_agent) {
       maxEditsAllowed = document.max_edits_per_agent;
     }
+    updateCycleDelay(document.mode);
 
     if (Array.isArray(document.agent_roles) && document.agent_roles.length) {
       agentRolesFromDocument = document.agent_roles;
@@ -291,13 +311,19 @@ async function agentCycle() {
     // Step 3: Generate edit via OpenAI
     console.log(`[${AGENT_ID}] Generating edit...`);
     const edit = await generateEdit(document.text, chatSummary);
+    const isEmptyDocument = !document.text || document.text.trim().length === 0;
+    if (isEmptyDocument) {
+      edit.anchor = edit.anchor || (document.topic ? document.topic.slice(0, 50) : DEFAULT_ANCHOR_FALLBACK);
+      edit.position = edit.position || 'after';
+    }
     
     console.log(`[${AGENT_ID}] Generated ${edit.operation}: ${edit.reasoning}`);
     
     // Validate anchor exists in document
-    if (edit.anchor && !document.text.includes(edit.anchor)) {
+    if (!isEmptyDocument && edit.anchor && !document.text.includes(edit.anchor)) {
       console.log(`[${AGENT_ID}] Warning: Anchor not found in document, skipping edit`);
       await postChatMessage(`(skipped) Generated edit but anchor not found: ${edit.reasoning}`);
+      markCycleComplete();
       return;
     }
     
@@ -317,10 +343,10 @@ async function agentCycle() {
     // Step 5: Post chat message
     if (result.status === 'accepted') {
       await postChatMessage(`Applied ${edit.operation}: ${edit.reasoning}`);
-      completedEdits++;
     } else {
       await postChatMessage(`Edit rejected: ${edit.reasoning}`);
     }
+    markCycleComplete();
     
   } catch (error) {
     if (error.response?.status === 429) {
@@ -331,6 +357,12 @@ async function agentCycle() {
       console.error(`[${AGENT_ID}] Error in agent cycle:`, error.message);
       // Continue running on other errors
     }
+  } finally {
+    // Ensure every cycle counts toward the per-agent limit for predictability
+    if (!cycleCounted && isRunning) {
+      markCycleComplete();
+    }
+    completedEdits = Math.min(completedEdits, maxEditsAllowed);
   }
 }
 
@@ -350,11 +382,11 @@ async function main() {
       console.log(`[${AGENT_ID}] Document found! Starting work...`);
     } catch (error) {
       if (error.response?.status === 404) {
-        console.log(`[${AGENT_ID}] No document yet, waiting ${CYCLE_DELAY_MS}ms...`);
-        await sleep(CYCLE_DELAY_MS);
+        console.log(`[${AGENT_ID}] No document yet, waiting ${cycleDelayMs}ms...`);
+        await sleep(cycleDelayMs);
       } else {
         console.log(`[${AGENT_ID}] Error checking document: ${error.message}, retrying...`);
-        await sleep(CYCLE_DELAY_MS);
+        await sleep(cycleDelayMs);
       }
     }
   }
@@ -368,6 +400,7 @@ async function main() {
     if (initialDocument.max_edits_per_agent) {
       maxEditsAllowed = initialDocument.max_edits_per_agent;
     }
+    updateCycleDelay(initialDocument.mode);
     if (Array.isArray(initialDocument.agent_roles) && initialDocument.agent_roles.length) {
       agentRolesFromDocument = initialDocument.agent_roles;
       const selectedRole = selectAgentRole(agentRolesFromDocument);
@@ -390,8 +423,8 @@ async function main() {
     await agentCycle();
     
     if (isRunning && completedEdits < maxEditsAllowed) {
-      console.log(`[${AGENT_ID}] Waiting ${CYCLE_DELAY_MS}ms before next cycle...`);
-      await sleep(CYCLE_DELAY_MS);
+      console.log(`[${AGENT_ID}] Waiting ${cycleDelayMs}ms before next cycle...`);
+      await sleep(cycleDelayMs);
     }
   }
   
