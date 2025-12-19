@@ -212,23 +212,6 @@ function DocumentPageContent() {
     }
   }, [API_URL, ERROR_MESSAGES.versions, selectedDocumentId, selectedVersion, fetchVersionDiff])
 
-  const fetchVersionDiff = useCallback(async (version: number | null) => {
-    if (!selectedDocumentId || !version) return
-    setLoadingDiff(true)
-    try {
-      const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions/${version}/diff`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch diff')
-      }
-      const data = await response.json()
-      setVersionDiff(data)
-    } catch (err) {
-      console.error('Error fetching diff:', err)
-    } finally {
-      setLoadingDiff(false)
-    }
-  }, [API_URL, selectedDocumentId])
-
   const handleStopAgents = async () => {
     if (!selectedDocumentId) return
     await fetch(`${API_URL}/api/document/${selectedDocumentId}/stop`, { method: 'POST' })
