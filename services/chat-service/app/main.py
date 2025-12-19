@@ -158,32 +158,38 @@ async def get_messages(
         
         # Parse messages
         result = []
-        for msg_id, msg_data in messages:
-            if document_id and msg_data.get("document_id") != document_id:
+        for raw_msg_id, msg_data in messages:
+            decoded_data = {}
+            for key, value in msg_data.items():
+                clean_key = key.decode() if isinstance(key, bytes) else key
+                decoded_value = value.decode() if isinstance(value, bytes) else value
+                decoded_data[clean_key] = decoded_value
+
+            if document_id and decoded_data.get("document_id") != document_id:
                 continue
             # Parse structured entities
             intent = None
             comment = None
             
-            if "intent" in msg_data:
+            if "intent" in decoded_data:
                 try:
-                    intent = json.loads(msg_data["intent"])
+                    intent = json.loads(decoded_data["intent"])
                 except (json.JSONDecodeError, KeyError):
                     pass
             
-            if "comment" in msg_data:
+            if "comment" in decoded_data:
                 try:
-                    comment = json.loads(msg_data["comment"])
+                    comment = json.loads(decoded_data["comment"])
                 except (json.JSONDecodeError, KeyError):
                     pass
             
             result.append(ChatMessage(
-                document_id=msg_data.get("document_id"),
-                message_id=msg_id,
-                agent_id=msg_data.get("agent_id", "unknown"),
-                agent_role=msg_data.get("agent_role"),
-                message=msg_data.get("message", ""),
-                timestamp=msg_data.get("timestamp", ""),
+                document_id=decoded_data.get("document_id"),
+                message_id=raw_msg_id.decode() if isinstance(raw_msg_id, bytes) else raw_msg_id,
+                agent_id=decoded_data.get("agent_id", "unknown"),
+                agent_role=decoded_data.get("agent_role"),
+                message=decoded_data.get("message", ""),
+                timestamp=decoded_data.get("timestamp", ""),
                 intent=intent,
                 comment=comment,
             ))

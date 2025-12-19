@@ -465,11 +465,16 @@ async def init_document(
     )
     db.add(budget)
 
+    base_text = (request.initial_text or "").strip()
+    if not base_text:
+        seed = (request.topic or "Черновик документа").strip()
+        base_text = f"{seed}\n\n" if seed else ""
+
     # Create initial document version
     doc = Document(
         document_id=doc_session.document_id,
         version=1,
-        text=request.initial_text or "",
+        text=base_text,
         timestamp=datetime.utcnow(),
         edit_id=None,
     )
@@ -753,6 +758,10 @@ async def get_edits(
             status=edit.status.value,
             tokens_used=edit.tokens_used,
             created_at=edit.created_at,
+            anchor=edit.anchor,
+            position=edit.position,
+            old_text=edit.old_text,
+            new_text=edit.new_text,
         )
         for edit in edits
     ]

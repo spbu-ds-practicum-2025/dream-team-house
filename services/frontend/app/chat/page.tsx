@@ -69,7 +69,7 @@ export default function ChatPage() {
     fetchMessages()
 
     if (autoRefresh) {
-      const interval = setInterval(fetchMessages, 2000)
+      const interval = setInterval(fetchMessages, 1000)
       return () => clearInterval(interval)
     }
   }, [autoRefresh, fetchDocuments, fetchMessages])
@@ -91,7 +91,7 @@ export default function ChatPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold text-indigo-600">
+              <Link href="/" className="text-xl sm:text-2xl font-bold text-indigo-600">
                 Dream Team House
               </Link>
             </div>

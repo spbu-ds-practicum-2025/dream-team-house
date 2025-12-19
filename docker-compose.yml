@@ -212,7 +212,7 @@ services:
     networks:
       - dream-team-network
     deploy:
-      replicas: 2
+      replicas: 10
 
 networks:
   dream-team-network:

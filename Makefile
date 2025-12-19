@@ -23,8 +23,8 @@ clean: ## Stop all services and remove volumes
 build: ## Rebuild all Docker images
 	docker-compose build
 
-start-agents: ## Start 5 AI agents
-	docker-compose up -d --scale ai-agent=5
+start-agents: ## Start 10 AI agents
+	docker-compose up -d --scale ai-agent=10
 
 stop-agents: ## Stop all AI agents
 	docker-compose stop ai-agent

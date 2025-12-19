@@ -44,6 +44,10 @@ interface Edit {
   status: string
   tokens_used: number
   created_at: string
+  anchor?: string | null
+  position?: string | null
+  old_text?: string | null
+  new_text?: string | null
 }
 
 interface VersionItem {
@@ -72,6 +76,7 @@ interface VersionDiff {
 }
 
 type TabKey = 'text' | 'versions'
+const REFRESH_INTERVAL_MS = 1000
 
 const statusStyles: Record<string, string> = {
   active: 'bg-green-100 text-green-800',
@@ -116,11 +121,35 @@ function DocumentPageContent() {
 
   const selectedVersionRef = useRef<number | null>(null)
   const previousStatusRef = useRef<string | null>(null)
+  const versionsRef = useRef<VersionItem[]>([])
   const selectedVersionMeta = selectedVersion
     ? versions.find((v) => v.version === selectedVersion)
     : undefined
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost'
+  const getEditHighlightClass = (edit: Edit) => {
+    if (edit.operation === 'insert') return 'bg-green-100 text-green-800'
+    if (edit.operation === 'replace') return 'bg-yellow-100 text-yellow-800'
+    if (edit.operation === 'delete') return 'bg-red-100 text-red-800'
+    return 'bg-gray-100 text-gray-800'
+  }
+  const buildEditSnippet = (edit: Edit) => {
+    const baseText = document?.text || ''
+    const target = (edit.new_text || edit.old_text || edit.anchor || '').trim()
+    if (!target) return null
+
+    const foundIndex = baseText.indexOf(target)
+    if (foundIndex !== -1) {
+      const start = Math.max(0, foundIndex - 10)
+      const end = Math.min(baseText.length, foundIndex + target.length + 10)
+      const prefix = `${start > 0 ? '...' : ''}${baseText.slice(start, foundIndex)}`
+      const suffix = `${baseText.slice(foundIndex + target.length, end)}${end < baseText.length ? '...' : ''}`
+      return { prefix, highlight: target, suffix: suffix || '...' }
+    }
+
+    const fallback = target.length > 30 ? `${target.slice(0, 30)}...` : target
+    return { prefix: '...', highlight: fallback, suffix: '...' }
+  }
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -187,7 +216,8 @@ function DocumentPageContent() {
     }
   }, [API_URL, selectedDocumentId])
 
-  const fetchVersions = useCallback(async (preserveSelection = false) => {
+  const fetchVersions = useCallback(async (options: { preserveSelection?: boolean; autoAdvance?: boolean } = {}) => {
+    const { preserveSelection = false, autoAdvance = false } = options
     if (!selectedDocumentId) return
     try {
       const response = await fetch(`${API_URL}/api/document/${selectedDocumentId}/versions?limit=50`)
@@ -195,22 +225,38 @@ function DocumentPageContent() {
         throw new Error(ERROR_MESSAGES.versions)
       }
       const data: VersionItem[] = await response.json()
+      const previousLatest = versionsRef.current.length > 0 ? versionsRef.current[0].version : null
+      versionsRef.current = data
       setVersions(data)
       const newestVersion = data[0]?.version ?? null
-      const currentSelected = preserveSelection ? selectedVersionRef.current : selectedVersion
-      const nextSelected = currentSelected && data.some((v) => v.version === currentSelected)
-        ? currentSelected
-        : newestVersion
-      setSelectedVersion(nextSelected)
+      const viewingLatest = selectedVersionRef.current !== null && selectedVersionRef.current === previousLatest
+
+      let nextSelected = selectedVersionRef.current
+      if (!nextSelected) {
+        nextSelected = newestVersion
+      }
+      if (autoAdvance && viewingLatest && newestVersion) {
+        nextSelected = newestVersion
+      }
+      if (!preserveSelection && selectedVersionRef.current === null) {
+        nextSelected = newestVersion
+      }
+
       if (nextSelected) {
-        fetchVersionDiff(nextSelected)
+        if (nextSelected !== selectedVersionRef.current) {
+          selectedVersionRef.current = nextSelected
+          setSelectedVersion(nextSelected)
+          fetchVersionDiff(nextSelected)
+        } else if (autoAdvance && viewingLatest) {
+          fetchVersionDiff(nextSelected)
+        }
       } else {
         setVersionDiff(null)
       }
     } catch (err) {
       console.error('Error fetching versions:', err)
     }
-  }, [API_URL, ERROR_MESSAGES.versions, selectedDocumentId, selectedVersion, fetchVersionDiff])
+  }, [API_URL, ERROR_MESSAGES.versions, fetchVersionDiff, selectedDocumentId])
 
   const handleStopAgents = async () => {
     if (!selectedDocumentId) return
@@ -238,14 +284,16 @@ function DocumentPageContent() {
 
   useEffect(() => {
     if (selectedDocumentId) {
+      setLoading(true)
       setSelectedVersion(null)
       selectedVersionRef.current = null
+      versionsRef.current = []
       setVersionDiff(null)
       fetchDocument()
       fetchEdits()
-      fetchVersions()
+      fetchVersions({ autoAdvance: true })
     }
-  }, [fetchDocument, fetchDocuments, fetchEdits, fetchVersions, selectedDocumentId])
+  }, [fetchDocument, fetchEdits, fetchVersions, selectedDocumentId])
 
   useEffect(() => {
     const statusChangedToInactive =
@@ -265,8 +313,8 @@ function DocumentPageContent() {
       const interval = setInterval(() => {
         fetchDocument()
         fetchEdits()
-        fetchVersions(true)
-      }, 3000)
+        fetchVersions({ preserveSelection: true, autoAdvance: true })
+      }, REFRESH_INTERVAL_MS)
       return () => clearInterval(interval)
     }
   }, [autoRefresh, fetchDocument, fetchEdits, fetchVersions, selectedDocumentId])
@@ -292,7 +340,7 @@ function DocumentPageContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold text-indigo-600">
+              <Link href="/" className="text-xl sm:text-2xl font-bold text-indigo-600">
                 Dream Team House
               </Link>
             </div>
@@ -361,16 +409,16 @@ function DocumentPageContent() {
               />
               <span className="text-sm text-gray-700">Авто-обновление</span>
             </label>
-            <button
-              onClick={() => {
-                fetchDocument()
-                fetchEdits()
-                fetchVersions(true)
-              }}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
-            >
-              Обновить
-            </button>
+              <button
+                onClick={() => {
+                  fetchDocument()
+                  fetchEdits()
+                  fetchVersions({ preserveSelection: true, autoAdvance: true })
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+              >
+                Обновить
+              </button>
           </div>
         </div>
 
@@ -547,12 +595,14 @@ function DocumentPageContent() {
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {edits.length > 0 ? (
                     edits.map((edit) => {
-                      const resolvedRole = getRoleForAgent(edit.agent_id, document?.agent_roles)
-                      return (
-                        <div
-                          key={edit.edit_id}
-                          className="p-3 bg-gray-50 rounded-md border border-gray-200"
-                        >
+                        const resolvedRole = getRoleForAgent(edit.agent_id, document?.agent_roles)
+                        const snippet = buildEditSnippet(edit)
+                        const highlightClass = getEditHighlightClass(edit)
+                       return (
+                         <div
+                           key={edit.edit_id}
+                           className="p-3 bg-gray-50 rounded-md border border-gray-200"
+                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="text-xs font-medium text-gray-600 flex flex-col gap-1">
                               <span>{edit.agent_id.substring(0, 12)}...</span>
@@ -562,20 +612,31 @@ function DocumentPageContent() {
                               className={`px-2 py-1 rounded text-xs font-medium ${
                                 edit.status === 'accepted'
                                   ? 'bg-green-100 text-green-800'
+                                  : edit.status === 'pending'
+                                  ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-red-100 text-red-800'
                               }`}
                             >
                               {edit.status}
                             </span>
-                          </div>
-                          <p className="text-sm text-gray-700">
-                            <strong>{edit.operation}</strong>
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Токенов: {edit.tokens_used}
-                          </p>
-                        </div>
-                      )
+                           </div>
+                           <div className="text-sm text-gray-700">
+                             <div className="text-xs uppercase text-gray-500 mb-1">{edit.operation}</div>
+                             {snippet ? (
+                               <div className="text-xs font-mono text-gray-800">
+                                 {snippet.prefix}
+                                 <span className={`px-1 rounded ${highlightClass}`}>{snippet.highlight}</span>
+                                 {snippet.suffix}
+                               </div>
+                             ) : (
+                               <strong>{edit.operation}</strong>
+                             )}
+                           </div>
+                           <p className="text-xs text-gray-500 mt-1">
+                             Токенов: {edit.tokens_used}
+                           </p>
+                         </div>
+                       )
                     })
                   ) : (
                     <p className="text-sm text-gray-500 text-center py-4">
