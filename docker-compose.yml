@@ -12,6 +12,11 @@ services:
       - postgres-text-a-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U textservice -d textservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   postgres-text-b:
     image: postgres:15-alpine
@@ -23,6 +28,11 @@ services:
       - postgres-text-b-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U textservice -d textservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   postgres-text-c:
     image: postgres:15-alpine
@@ -34,6 +44,11 @@ services:
       - postgres-text-c-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U textservice -d textservice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # PostgreSQL database for Analytics Service
   postgres-analytics:
@@ -46,6 +61,11 @@ services:
       - postgres-analytics-data:/var/lib/postgresql/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics -d analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # Redis for Chat Service
   redis:
@@ -55,6 +75,11 @@ services:
       - redis-data:/data
     networks:
       - dream-team-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # Text Service - Node A (Moscow)
   text-service-a:
@@ -68,7 +93,8 @@ services:
       ANALYTICS_URL: http://analytics-service:8000
       PEER_NODES: http://text-service-b:8000,http://text-service-c:8000
     depends_on:
-      - postgres-text-a
+      postgres-text-a:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -84,7 +110,8 @@ services:
       ANALYTICS_URL: http://analytics-service:8000
       PEER_NODES: http://text-service-a:8000,http://text-service-c:8000
     depends_on:
-      - postgres-text-b
+      postgres-text-b:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -100,7 +127,8 @@ services:
       ANALYTICS_URL: http://analytics-service:8000
       PEER_NODES: http://text-service-a:8000,http://text-service-b:8000
     depends_on:
-      - postgres-text-c
+      postgres-text-c:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -112,7 +140,8 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -124,7 +153,8 @@ services:
     environment:
       DATABASE_URL: postgresql://analytics:analytics_password@postgres-analytics:5432/analytics
     depends_on:
-      - postgres-analytics
+      postgres-analytics:
+        condition: service_healthy
     networks:
       - dream-team-network
 
@@ -149,10 +179,16 @@ services:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost
+        NEXT_PUBLIC_CHAT_URL: http://localhost
+        NEXT_PUBLIC_ANALYTICS_URL: http://localhost
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost/api
+      NEXT_PUBLIC_API_URL: http://localhost
+      NEXT_PUBLIC_CHAT_URL: http://localhost
+      NEXT_PUBLIC_ANALYTICS_URL: http://localhost
     depends_on:
       - load-balancer
     networks:
