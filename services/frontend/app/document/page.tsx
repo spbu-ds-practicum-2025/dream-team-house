@@ -97,6 +97,9 @@ export default function DocumentPage() {
   const [statusNotice, setStatusNotice] = useState('')
 
   const previousStatusRef = useRef<string | null>(null)
+  const selectedVersionMeta = selectedVersion
+    ? versions.find((v) => v.version === selectedVersion)
+    : undefined
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost'
 
@@ -225,7 +228,13 @@ export default function DocumentPage() {
   }, [selectedDocumentId])
 
   useEffect(() => {
-    if (document?.status && previousStatusRef.current && previousStatusRef.current !== document.status && document.status !== 'active') {
+    const statusChangedToInactive =
+      document?.status &&
+      previousStatusRef.current &&
+      previousStatusRef.current !== document.status &&
+      document.status !== 'active'
+
+    if (statusChangedToInactive) {
       setStatusNotice(`Работа завершена: ${document.status}`)
     }
     previousStatusRef.current = document?.status || null
@@ -432,11 +441,9 @@ export default function DocumentPage() {
                       </button>
                     </div>
                     <div className="text-sm text-gray-600">
-                      {selectedVersion && (
+                      {selectedVersion && selectedVersionMeta && (
                         <span>
-                          {versions.find((v) => v.version === selectedVersion)
-                            ? new Date(versions.find((v) => v.version === selectedVersion)!.timestamp).toLocaleString('ru-RU')
-                            : ''}
+                          {new Date(selectedVersionMeta.timestamp).toLocaleString('ru-RU')}
                         </span>
                       )}
                     </div>

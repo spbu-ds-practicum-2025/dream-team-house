@@ -4,7 +4,7 @@ Database models for Text Service
 from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, Enum, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, BigInteger, Enum, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
