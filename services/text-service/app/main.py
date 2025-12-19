@@ -46,6 +46,8 @@ from app.replication import replicate_to_peers, send_analytics_event, NODE_ID
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+DEFAULT_EMPTY_SEED = "Черновик документа"
+
 DEFAULT_ROLE_PRESETS = [
     {
         "role_key": "researcher",
@@ -467,7 +469,7 @@ async def init_document(
 
     base_text = (request.initial_text or "").strip()
     if not base_text:
-        seed = (request.topic or "Черновик документа").strip()
+        seed = (request.topic or DEFAULT_EMPTY_SEED).strip()
         base_text = f"{seed}\n\n" if seed else ""
 
     # Create initial document version

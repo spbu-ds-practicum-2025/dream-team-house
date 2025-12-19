@@ -29,6 +29,7 @@ const CONFIGURED_MAX_EDITS = parseInt(process.env.MAX_EDITS || '1');
 const CYCLE_DELAY_MS = parseInt(process.env.CYCLE_DELAY_MS || '2000');
 const MAX_RETRIES = 5;
 const DEFAULT_EXPANSION_PROMPT = 'Увеличивай объем текста, добавляя ценность, новые детали, примеры и связующие переходы без пустых повторов.';
+const DEFAULT_ANCHOR_FALLBACK = 'Начало';
 
 console.log('AI Agent starting...');
 console.log('Configuration:', {
@@ -312,7 +313,7 @@ async function agentCycle() {
     const edit = await generateEdit(document.text, chatSummary);
     const isEmptyDocument = !document.text || document.text.trim().length === 0;
     if (isEmptyDocument) {
-      edit.anchor = edit.anchor || (document.topic ? document.topic.slice(0, 50) : 'Начало');
+      edit.anchor = edit.anchor || (document.topic ? document.topic.slice(0, 50) : DEFAULT_ANCHOR_FALLBACK);
       edit.position = edit.position || 'after';
     }
     
