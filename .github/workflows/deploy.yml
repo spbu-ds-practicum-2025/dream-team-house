@@ -75,6 +75,13 @@ jobs:
               -e "s|__ANALYTICS_SERVICE_DOMAIN__|${ANALYTICS_SERVICE_DOMAIN}|g" \
               services/traefik/dynamic.yml.template > services/traefik/dynamic.yml
 
+          # Validate all placeholders were substituted
+          if grep -q "__.*__" services/traefik/dynamic.yml; then
+            echo "ERROR: dynamic.yml still contains placeholder values!"
+            grep "__.*__" services/traefik/dynamic.yml
+            exit 1
+          fi
+
           echo "=== Copying files to server ==="
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} -r ./* "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/
 
@@ -95,6 +102,10 @@ jobs:
 
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} env_file "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/.env
           rm env_file
+
+          echo "=== Setting secure permissions on .env file ==="
+          sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod 600 /opt/dream-team-house/.env"
 
           echo "=== Executing deployment on server ==="
           sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" bash << 'REMOTE_COMMANDS'
