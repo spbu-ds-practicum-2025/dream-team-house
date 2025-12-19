@@ -187,6 +187,13 @@ def resolve_default_roles(mode: Optional[str], agent_count: int) -> List[dict]:
     return roles[:agent_count]
 
 
+def safe_div_int(value: Optional[int], divisor: Optional[int]) -> Optional[int]:
+    """Safely divide integers returning int or None on invalid input."""
+    if value is None or divisor is None or divisor <= 0:
+        return None
+    return int(value / divisor)
+
+
 async def get_latest_document(db: AsyncSession, document_id: uuid.UUID) -> Optional[Document]:
     """Fetch latest document version for session."""
     result = await db.execute(
@@ -209,11 +216,7 @@ def build_document_response(
     agent_count = settings.agent_count if settings else default_agent_count
     if not agent_count or agent_count <= 0:
         agent_count = default_agent_count
-    max_edits_per_agent = (
-        settings.max_edits_per_agent
-        if settings and settings.max_edits_per_agent
-        else (int(session.max_edits / agent_count) if session.max_edits and agent_count > 0 else None)
-    )
+    max_edits_per_agent = settings.max_edits_per_agent if settings and settings.max_edits_per_agent else safe_div_int(session.max_edits, agent_count)
     agent_roles = settings.agent_roles if settings and settings.agent_roles else resolve_default_roles(session.mode, agent_count)
 
     return DocumentResponse(
@@ -779,9 +782,7 @@ async def replication_sync(
             incoming_agent_count = request.agent_count or (len(request.agent_roles or []) or (3 if request.mode == "light" else 10))
             if incoming_agent_count <= 0:
                 incoming_agent_count = 3 if request.mode == "light" else 10
-            incoming_max_per_agent = request.max_edits_per_agent or (
-                int(request.max_edits / incoming_agent_count) if request.max_edits and incoming_agent_count > 0 else None
-            )
+            incoming_max_per_agent = request.max_edits_per_agent or safe_div_int(request.max_edits, incoming_agent_count)
             session_obj = DocumentSession(
                 document_id=doc_uuid,
                 topic=request.topic or "replicated",

@@ -211,7 +211,7 @@ export default function Home() {
                 id="initialText"
                 value={initialText}
                 onChange={(e) => setInitialText(e.target.value)}
-                rows={8}
+                rows={4}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Введите начальный текст документа..."
               />
