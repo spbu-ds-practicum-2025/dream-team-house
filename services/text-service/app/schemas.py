@@ -2,7 +2,7 @@
 Pydantic schemas for request/response validation
 """
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 from uuid import UUID
 
@@ -21,7 +21,7 @@ class DocumentInitRequest(BaseModel):
     """Request to initialize a new document"""
     topic: str
     initial_text: str
-    mode: Optional[str] = "light"  # light or pro
+    mode: Optional[Literal["light", "pro"]] = "light"
     max_edits: Optional[int] = 3
     token_budget: Optional[int] = 50000
 

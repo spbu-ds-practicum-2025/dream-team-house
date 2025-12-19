@@ -117,8 +117,8 @@ async def init_document(
         await db.commit()
         logger.info("Cleared existing documents")
     
-    # Set token budget based on request
-    token_limit = request.token_budget if request.token_budget else 50000
+    # Set token budget based on request (default from schema is 50000)
+    token_limit = request.token_budget or 50000
     await db.execute(
         TokenBudget.__table__.update()
         .where(TokenBudget.id == 1)

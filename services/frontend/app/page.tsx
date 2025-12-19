@@ -212,7 +212,7 @@ export default function Home() {
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Документ будет реплицирован на 3 узла (Москва, Санкт-Петербург, Новосибирск)</li>
               <li>• {MODES[mode].agentCount} AI-агента начнут работу одновременно</li>
-              <li>• Каждый агент сделает до {Math.ceil(MODES[mode].maxEdits / MODES[mode].agentCount)} правок</li>
+              <li>• Всего до {MODES[mode].maxEdits} правок на документ</li>
               <li>• Все изменения будут видны в реальном времени</li>
             </ul>
           </div>
