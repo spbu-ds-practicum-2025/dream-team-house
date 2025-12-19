@@ -2,7 +2,7 @@
 Unit tests for text operations
 """
 import pytest
-from app.operations import apply_operation_to_text, validate_edit_request
+from app.operations import apply_operation_to_text, validate_edit_request, build_diff_segments
 from app.schemas import EditRequest
 
 
@@ -250,3 +250,24 @@ class TestValidateEditRequest:
         is_valid, error = validate_edit_request(edit)
         assert is_valid is False
         assert "exceeds" in error
+
+
+class TestBuildDiffSegments:
+    """Tests for diff segment builder"""
+
+    def test_diff_insert_and_replace(self):
+        old = "Hello world"
+        new = "Hello brave new world"
+        segments = build_diff_segments(old, new)
+
+        # Should keep greeting, add brave and new
+        assert any(s["type"] == "equal" and s["text"].startswith("Hello") for s in segments)
+        assert any(s["type"] == "insert" and "brave new" in s["text"] for s in segments)
+
+    def test_diff_replace_marks_delete_and_replace(self):
+        old = "Old text here"
+        new = "New text here"
+        segments = build_diff_segments(old, new)
+
+        assert {"type": "delete", "text": "Old"} in segments
+        assert {"type": "replace", "text": "New"} in segments

@@ -63,6 +63,7 @@ class EditOperation(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     """Request to post a chat message"""
+    document_id: Optional[str] = None
     agent_id: str
     message: str
     intent: Optional[EditIntent] = None
@@ -77,6 +78,7 @@ class ChatMessageResponse(BaseModel):
 
 class ChatMessage(BaseModel):
     """Chat message structure"""
+    document_id: Optional[str] = None
     message_id: str
     agent_id: str
     message: str

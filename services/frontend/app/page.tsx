@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 
 type GenerationMode = 'light' | 'pro'
 
+const REDIRECT_DELAY_MS = 1200
+
 interface ModeConfig {
   name: string
   description: string
@@ -67,10 +69,11 @@ export default function Home() {
         throw new Error('Failed to initialize document')
       }
 
+      const data = await response.json()
       setSuccess(true)
       setTimeout(() => {
-        router.push('/document')
-      }, 1500)
+        router.push(`/document?documentId=${encodeURIComponent(data.document_id)}`)
+      }, REDIRECT_DELAY_MS)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {

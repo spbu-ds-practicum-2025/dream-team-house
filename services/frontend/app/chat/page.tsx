@@ -5,6 +5,7 @@ import Link from 'next/link'
 
 interface ChatMessage {
   message_id: string
+  document_id?: string | null
   agent_id: string
   message: string
   timestamp: string
@@ -12,17 +13,30 @@ interface ChatMessage {
   comment?: any
 }
 
+interface DocumentSummary {
+  document_id: string
+  topic: string
+  status: string
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [documents, setDocuments] = useState<DocumentSummary[]>([])
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   const CHAT_URL = process.env.NEXT_PUBLIC_CHAT_URL || 'http://localhost'
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost'
 
   const fetchMessages = async () => {
     try {
-      const response = await fetch(`${CHAT_URL}/api/chat/messages?limit=100`)
+      const params = new URLSearchParams({ limit: '100' })
+      if (selectedDocumentId) {
+        params.append('document_id', selectedDocumentId)
+      }
+      const response = await fetch(`${CHAT_URL}/api/chat/messages?${params.toString()}`)
       if (!response.ok) {
         throw new Error('Failed to fetch messages')
       }
@@ -36,14 +50,31 @@ export default function ChatPage() {
     }
   }
 
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/documents`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents')
+      }
+      const data = await response.json()
+      setDocuments(data)
+      if (!selectedDocumentId && data.length > 0) {
+        setSelectedDocumentId(data[0].document_id)
+      }
+    } catch (err) {
+      console.error('Error fetching documents', err)
+    }
+  }
+
   useEffect(() => {
+    fetchDocuments()
     fetchMessages()
 
     if (autoRefresh) {
       const interval = setInterval(fetchMessages, 2000)
       return () => clearInterval(interval)
     }
-  }, [autoRefresh])
+  }, [autoRefresh, selectedDocumentId])
 
   if (loading) {
     return (
@@ -85,6 +116,18 @@ export default function ChatPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Чат агентов</h1>
           <div className="flex items-center space-x-4">
+            <select
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              value={selectedDocumentId}
+              onChange={(e) => setSelectedDocumentId(e.target.value)}
+            >
+              <option value="">Все документы</option>
+              {documents.map((doc) => (
+                <option key={doc.document_id} value={doc.document_id}>
+                  {doc.topic} ({doc.status})
+                </option>
+              ))}
+            </select>
             <label className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -134,6 +177,11 @@ export default function ChatPage() {
                         </p>
                       </div>
                     </div>
+                    {msg.document_id && (
+                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                        {msg.document_id.slice(0, 8)}
+                      </span>
+                    )}
                     {msg.intent && (
                       <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
                         Intent

@@ -4,7 +4,7 @@ Replication logic for distributed Text Service nodes
 import os
 import aiohttp
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 import logging
 
@@ -16,7 +16,15 @@ PEER_NODES = os.getenv("PEER_NODES", "").split(",") if os.getenv("PEER_NODES") e
 ANALYTICS_URL = os.getenv("ANALYTICS_URL", "http://analytics-service:8000")
 
 
-async def replicate_to_peers(version: int, text: str, timestamp: datetime, edit_id: Optional[str]):
+async def replicate_to_peers(
+    document_id: str,
+    version: int,
+    text: str,
+    timestamp: datetime,
+    edit_id: Optional[str],
+    session_metadata: Optional[Dict[str, Any]] = None,
+    token_used: Optional[int] = None,
+):
     """
     Replicate document version to peer nodes asynchronously
     """
@@ -28,7 +36,16 @@ async def replicate_to_peers(version: int, text: str, timestamp: datetime, edit_
     for peer_url in PEER_NODES:
         if peer_url.strip():
             task = asyncio.create_task(
-                replicate_to_node(peer_url.strip(), version, text, timestamp, edit_id)
+                replicate_to_node(
+                    peer_url.strip(),
+                    document_id,
+                    version,
+                    text,
+                    timestamp,
+                    edit_id,
+                    session_metadata,
+                    token_used,
+                )
             )
             tasks.append(task)
     
@@ -43,22 +60,39 @@ async def replicate_to_peers(version: int, text: str, timestamp: datetime, edit_
 
 async def replicate_to_node(
     node_url: str,
+    document_id: str,
     version: int,
     text: str,
     timestamp: datetime,
-    edit_id: Optional[str]
+    edit_id: Optional[str],
+    session_metadata: Optional[Dict[str, Any]] = None,
+    token_used: Optional[int] = None,
 ):
     """
     Send replication message to a single node
     """
     url = f"{node_url}/api/replication/sync"
     payload = {
+        "document_id": document_id,
         "version": version,
         "text": text,
         "timestamp": timestamp.isoformat(),
         "edit_id": str(edit_id) if edit_id else None,
         "source_node": NODE_ID,
     }
+    if session_metadata:
+        payload.update(
+            {
+                "topic": session_metadata.get("topic"),
+                "mode": session_metadata.get("mode"),
+                "status": session_metadata.get("status"),
+                "max_edits": session_metadata.get("max_edits"),
+                "token_budget": session_metadata.get("token_budget"),
+                "final_version": session_metadata.get("final_version"),
+            }
+        )
+    if token_used is not None:
+        payload["token_used"] = token_used
     
     try:
         async with aiohttp.ClientSession() as session:

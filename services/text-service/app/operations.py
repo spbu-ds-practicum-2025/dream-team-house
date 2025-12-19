@@ -2,7 +2,9 @@
 Core business logic for text operations
 Based on multi_agent_editor_demo_Version2.py
 """
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
+import difflib
+import re
 from app.schemas import EditRequest
 
 # Text length limits
@@ -123,3 +125,38 @@ def validate_edit_request(edit: EditRequest) -> Tuple[bool, Optional[str]]:
         return False, f"old_text exceeds {MAX_OLD_TEXT_LENGTH} character limit"
     
     return True, None
+
+
+def build_diff_segments(old_text: str, new_text: str) -> List[Dict[str, str]]:
+    """
+    Build diff segments between two texts for highlighting.
+    Uses word-level diff to keep output compact.
+    Replace operations emit a delete (old) and replace (new) segment
+    so the UI can render removals in red and replacements in yellow.
+    """
+    # Tokenize preserving whitespace chunks so we don't lose formatting
+    old_tokens = re.findall(r'\S+|\s+', old_text)
+    new_tokens = re.findall(r'\S+|\s+', new_text)
+    matcher = difflib.SequenceMatcher(a=old_tokens, b=new_tokens)
+    segments: List[Dict[str, str]] = []
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        old_chunk = "".join(old_tokens[i1:i2])
+        new_chunk = "".join(new_tokens[j1:j2])
+
+        if tag == "equal":
+            if new_chunk:
+                segments.append({"type": "equal", "text": new_chunk})
+        elif tag == "insert":
+            if new_chunk:
+                segments.append({"type": "insert", "text": new_chunk})
+        elif tag == "delete":
+            if old_chunk:
+                segments.append({"type": "delete", "text": old_chunk})
+        elif tag == "replace":
+            if old_chunk:
+                segments.append({"type": "delete", "text": old_chunk})
+            if new_chunk:
+                segments.append({"type": "replace", "text": new_chunk})
+
+    return segments

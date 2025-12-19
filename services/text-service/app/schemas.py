@@ -9,9 +9,19 @@ from uuid import UUID
 
 class DocumentResponse(BaseModel):
     """Response model for document"""
+    document_id: str
     version: int
     text: str
     timestamp: datetime
+    topic: Optional[str] = None
+    mode: Optional[str] = None
+    status: Optional[str] = None
+    max_edits: Optional[int] = None
+    token_budget: Optional[int] = None
+    token_used: Optional[int] = None
+    finished_at: Optional[datetime] = None
+    final_version: Optional[int] = None
+    total_versions: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -34,6 +44,7 @@ class DocumentInitResponse(BaseModel):
 
 class EditRequest(BaseModel):
     """Request to submit an edit"""
+    document_id: Optional[str] = None
     agent_id: str
     operation: str  # insert, replace, delete
     anchor: Optional[str] = None
@@ -45,6 +56,7 @@ class EditRequest(BaseModel):
 
 class EditResponse(BaseModel):
     """Response for edit submission"""
+    document_id: str
     edit_id: str
     status: str  # accepted, rejected
     version: int
@@ -52,6 +64,7 @@ class EditResponse(BaseModel):
 
 class EditListItem(BaseModel):
     """Edit item in list"""
+    document_id: str
     edit_id: UUID
     agent_id: str
     operation: str
@@ -65,11 +78,19 @@ class EditListItem(BaseModel):
 
 class ReplicationSyncRequest(BaseModel):
     """Replication sync message"""
+    document_id: str
     version: int
     text: str
     timestamp: datetime
     edit_id: Optional[str] = None
     source_node: str
+    topic: Optional[str] = None
+    mode: Optional[str] = None
+    status: Optional[str] = None
+    max_edits: Optional[int] = None
+    token_budget: Optional[int] = None
+    token_used: Optional[int] = None
+    final_version: Optional[int] = None
 
 
 class ReplicationSyncResponse(BaseModel):
@@ -81,6 +102,48 @@ class ReplicationSyncResponse(BaseModel):
 class CatchUpResponse(BaseModel):
     """Catch-up response with missing versions"""
     versions: List[dict]
+
+
+class DocumentListItem(BaseModel):
+    """Summary of a document session"""
+    document_id: str
+    topic: str
+    mode: Optional[str] = None
+    status: str
+    current_version: int
+    final_version: Optional[int] = None
+    updated_at: datetime
+    finished_at: Optional[datetime] = None
+
+
+class VersionItem(BaseModel):
+    """Single document version item"""
+    version: int
+    timestamp: datetime
+
+
+class DiffSegment(BaseModel):
+    """Diff segment for highlighting"""
+    type: Literal["equal", "insert", "delete", "replace"]
+    text: str
+
+
+class VersionDiffResponse(BaseModel):
+    """Diff between two document versions"""
+    document_id: str
+    target_version: int
+    base_version: Optional[int] = None
+    timestamp: datetime
+    segments: List[DiffSegment]
+    target_text: str
+
+
+class DocumentActionResponse(BaseModel):
+    """Response for stop/finalize actions"""
+    document_id: str
+    status: str
+    finished_at: Optional[datetime] = None
+    final_version: Optional[int] = None
 
 
 class AnalyticsEventRequest(BaseModel):
