@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -71,7 +71,7 @@ const statusStyles: Record<string, string> = {
   finalized: 'bg-purple-100 text-purple-800',
 }
 
-export default function DocumentPage() {
+function DocumentPageContent() {
   const searchParams = useSearchParams()
   const queryDocumentId = searchParams.get('documentId')
 
@@ -526,5 +526,22 @@ export default function DocumentPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function DocumentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Загрузка документа...</p>
+          </div>
+        </div>
+      }
+    >
+      <DocumentPageContent />
+    </Suspense>
   )
 }
