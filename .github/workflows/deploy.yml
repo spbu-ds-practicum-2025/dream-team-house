@@ -79,6 +79,7 @@ jobs:
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} -r ./* "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/
 
           echo "=== Creating .env file on server ==="
+          umask 077  # Set restrictive permissions for env_file
           cat > env_file << EOF
           OPENAI_API_KEY=${OPENAI_API_KEY}
           CERTBOT_EMAIL=${CERTBOT_EMAIL}
