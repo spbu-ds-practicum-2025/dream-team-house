@@ -197,7 +197,17 @@ async function agentCycle() {
     
     // Step 1-2: Get document and chat
     console.log(`[${AGENT_ID}] Fetching document and chat...`);
-    const document = await getCurrentDocument();
+    let document;
+    try {
+      document = await getCurrentDocument();
+    } catch (error) {
+      if (error.response?.status === 404) {
+        console.log(`[${AGENT_ID}] No document found, waiting...`);
+        return; // Wait for next cycle
+      }
+      throw error;
+    }
+    
     const chatMessages = await getChatMessages(lastChatTimestamp);
     
     if (chatMessages.length > 0) {
@@ -259,7 +269,32 @@ async function agentCycle() {
 async function main() {
   console.log(`[${AGENT_ID}] Agent starting with role: ${AGENT_ROLE}`);
   
-  // Initial greeting
+  // Wait for a document to be available before starting work
+  let documentExists = false;
+  console.log(`[${AGENT_ID}] Waiting for document to be initialized...`);
+  
+  while (!documentExists && isRunning) {
+    try {
+      await getCurrentDocument();
+      documentExists = true;
+      console.log(`[${AGENT_ID}] Document found! Starting work...`);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        console.log(`[${AGENT_ID}] No document yet, waiting ${CYCLE_DELAY_MS}ms...`);
+        await sleep(CYCLE_DELAY_MS);
+      } else {
+        console.log(`[${AGENT_ID}] Error checking document: ${error.message}, retrying...`);
+        await sleep(CYCLE_DELAY_MS);
+      }
+    }
+  }
+  
+  if (!isRunning) {
+    console.log(`[${AGENT_ID}] Agent stopped before document was found.`);
+    return;
+  }
+  
+  // Initial greeting - only post once document exists
   try {
     await postChatMessage(`Hello! I'm ${AGENT_ID}, role: ${AGENT_ROLE}. Starting work...`);
   } catch (error) {

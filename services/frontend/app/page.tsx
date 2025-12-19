@@ -4,10 +4,38 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+type GenerationMode = 'light' | 'pro'
+
+interface ModeConfig {
+  name: string
+  description: string
+  maxEdits: number
+  tokenBudget: number
+  agentCount: number
+}
+
+const MODES: Record<GenerationMode, ModeConfig> = {
+  light: {
+    name: 'Light',
+    description: 'Быстрая генерация с минимальными затратами',
+    maxEdits: 3,
+    tokenBudget: 50000,
+    agentCount: 2,
+  },
+  pro: {
+    name: 'Pro',
+    description: 'Полноценная генерация с расширенными правками',
+    maxEdits: 10,
+    tokenBudget: 500000,
+    agentCount: 3,
+  },
+}
+
 export default function Home() {
   const router = useRouter()
   const [topic, setTopic] = useState('')
   const [initialText, setInitialText] = useState('')
+  const [mode, setMode] = useState<GenerationMode>('light')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -29,6 +57,9 @@ export default function Home() {
         body: JSON.stringify({
           topic,
           initial_text: initialText,
+          mode,
+          max_edits: MODES[mode].maxEdits,
+          token_budget: MODES[mode].tokenBudget,
         }),
       })
 
@@ -78,7 +109,7 @@ export default function Home() {
           
           <p className="text-gray-600 mb-8">
             Инициализируйте документ, и AI-агенты начнут коллективную работу над ним.
-            Система использует 3 агента, каждый сделает до 2 правок.
+            Выберите режим генерации в зависимости от ваших потребностей.
           </p>
 
           {success && (
@@ -124,6 +155,45 @@ export default function Home() {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Режим генерации
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                {(Object.keys(MODES) as GenerationMode[]).map((modeKey) => {
+                  const modeConfig = MODES[modeKey]
+                  const isSelected = mode === modeKey
+                  return (
+                    <button
+                      key={modeKey}
+                      type="button"
+                      onClick={() => setMode(modeKey)}
+                      className={`p-4 border-2 rounded-lg text-left transition-all ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50'
+                          : 'border-gray-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`font-semibold text-lg ${isSelected ? 'text-indigo-600' : 'text-gray-900'}`}>
+                          {modeConfig.name}
+                        </span>
+                        {isSelected && (
+                          <span className="text-indigo-600">✓</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{modeConfig.description}</p>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <p>• До {modeConfig.maxEdits} правок</p>
+                        <p>• {modeConfig.agentCount} агента</p>
+                        <p>• Лимит: {(modeConfig.tokenBudget / 1000).toFixed(0)}K токенов</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -133,7 +203,7 @@ export default function Home() {
                   : 'bg-indigo-600 hover:bg-indigo-700'
               }`}
             >
-              {loading ? 'Создание...' : 'Создать документ'}
+              {loading ? 'Создание...' : `Создать документ (${MODES[mode].name})`}
             </button>
           </form>
 
@@ -141,8 +211,8 @@ export default function Home() {
             <h3 className="font-semibold text-blue-900 mb-2">ℹ️ Как это работает:</h3>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Документ будет реплицирован на 3 узла (Москва, Санкт-Петербург, Новосибирск)</li>
-              <li>• 3 AI-агента начнут работу одновременно</li>
-              <li>• Каждый агент сделает до 2 правок</li>
+              <li>• {MODES[mode].agentCount} AI-агента начнут работу одновременно</li>
+              <li>• Всего до {MODES[mode].maxEdits} правок на документ</li>
               <li>• Все изменения будут видны в реальном времени</li>
             </ul>
           </div>

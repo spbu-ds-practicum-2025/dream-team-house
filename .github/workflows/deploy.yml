@@ -91,9 +91,12 @@ jobs:
           : "${CERTBOT_EMAIL:?CERTBOT_EMAIL is required}"
           : "${FRONTEND_DOMAIN:?FRONTEND_DOMAIN is required}"
 
-          # Generate POSTGRES_PASSWORD if not exists in .env
-          if ! grep -q "^POSTGRES_PASSWORD=" .env 2>/dev/null; then
-            echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)" >> .env
+          # Generate database passwords if not exists in .env
+          if ! grep -q "^POSTGRES_TEXT_PASSWORD=" .env 2>/dev/null; then
+            echo "POSTGRES_TEXT_PASSWORD=textservice_password" >> .env
+          fi
+          if ! grep -q "^POSTGRES_ANALYTICS_PASSWORD=" .env 2>/dev/null; then
+            echo "POSTGRES_ANALYTICS_PASSWORD=analytics_password" >> .env
           fi
 
           echo "=== Docker versions ==="
@@ -107,7 +110,7 @@ jobs:
           docker compose -f docker-compose.prod.yml up -d --build
 
           echo "=== Waiting for services to start ==="
-          sleep 10
+          sleep 15
 
           echo "=== Traefik logs (last 200 lines) ==="
           docker logs dream-team-house-traefik-1 --tail 200 || true

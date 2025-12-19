@@ -114,13 +114,17 @@ async def init_document(
         # Delete existing documents (as per spec: only one document at a time)
         await db.execute(Document.__table__.delete())
         await db.execute(Edit.__table__.delete())
-        await db.execute(
-            TokenBudget.__table__.update()
-            .where(TokenBudget.id == 1)
-            .values(total_tokens=0)
-        )
         await db.commit()
         logger.info("Cleared existing documents")
+    
+    # Set token budget based on request
+    await db.execute(
+        TokenBudget.__table__.update()
+        .where(TokenBudget.id == 1)
+        .values(total_tokens=0, limit_tokens=request.token_budget)
+    )
+    await db.commit()
+    logger.info(f"Token budget set to {request.token_budget}")
     
     # Create initial document
     doc = Document(
@@ -132,7 +136,7 @@ async def init_document(
     db.add(doc)
     await db.commit()
     
-    logger.info(f"Initialized document with topic: {request.topic}")
+    logger.info(f"Initialized document with topic: {request.topic}, mode: {request.mode}")
     
     # Send analytics event
     await send_analytics_event({
@@ -141,6 +145,8 @@ async def init_document(
         "metadata": {
             "topic": request.topic,
             "node_id": NODE_ID,
+            "mode": request.mode,
+            "token_budget": request.token_budget,
         }
     })
     
