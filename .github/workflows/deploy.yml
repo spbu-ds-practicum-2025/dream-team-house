@@ -29,6 +29,7 @@ jobs:
           target: 'desktop'
           arch: 'win64_mingw'
           modules: 'qtcharts'
+          tools: 'tools_mingw1120'
           cache: true
 
       - name: Configure desktop app
@@ -45,9 +46,9 @@ jobs:
             -DCHAT_API_URL="$chatUrl" `
             -DANALYTICS_API_URL="$analyticsUrl" `
             -DCMAKE_PREFIX_PATH="$env:Qt6_DIR" `
-            -DCMAKE_C_COMPILER="$qtTools\gcc.exe" `
-            -DCMAKE_CXX_COMPILER="$qtTools\g++.exe" `
-            -DCMAKE_MAKE_PROGRAM="ninja.exe"
+            -DCMAKE_C_COMPILER="gcc" `
+            -DCMAKE_CXX_COMPILER="g++" `
+            -DCMAKE_MAKE_PROGRAM="ninja"
 
       - name: Build desktop app
         shell: pwsh
