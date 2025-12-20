@@ -11,11 +11,9 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QtCharts/QBarSet>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
-#include <QtCharts/QValueAxis>
 
 #include "api_client.h"
 #include "navigation_bar.h"
@@ -64,7 +62,7 @@ void AnalyticsWindow::setupUi()
     m_table->setHorizontalHeaderLabels({tr("Metric"), tr("Value")});
     layout->addWidget(m_table);
 
-    m_chartView = new QtCharts::QChartView(new QtCharts::QChart(), this);
+    m_chartView = new QChartView(new QChart(), this);
     m_chartView->setMinimumHeight(200);
     layout->addWidget(m_chartView);
 
@@ -79,8 +77,8 @@ void AnalyticsWindow::setupUi()
 
 void AnalyticsWindow::updateChart(const QJsonArray& points)
 {
-    auto* chart = new QtCharts::QChart();
-    auto* series = new QtCharts::QLineSeries(chart);
+    auto* chart = new QChart();
+    auto* series = new QLineSeries(chart);
     series->setName(tr("Token usage"));
     for (const auto& value : points) {
         const auto obj = value.toObject();

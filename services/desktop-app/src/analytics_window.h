@@ -7,12 +7,6 @@
 #include <QtCharts/QLineSeries>
 #include <QJsonArray>
 
-namespace QtCharts {
-class QChart;
-class QChartView;
-class QLineSeries;
-}
-
 class ApiClient;
 class NavigationBar;
 class SessionState;
@@ -40,6 +34,6 @@ private:
     QLabel* m_statusLabel;
     QComboBox* m_periodCombo;
     QTableWidget* m_table;
-    QtCharts::QChartView* m_chartView;
+    QChartView* m_chartView;
     QPushButton* m_refreshButton;
 };

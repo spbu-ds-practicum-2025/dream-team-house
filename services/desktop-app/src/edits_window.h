@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QJsonArray>
 
 class ApiClient;
 class NavigationBar;
