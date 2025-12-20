@@ -34,6 +34,6 @@ private:
     QLabel* m_statusLabel;
     QComboBox* m_periodCombo;
     QTableWidget* m_table;
-    QtCharts::QChartView* m_chartView;
+    QChartView* m_chartView;
     QPushButton* m_refreshButton;
 };
