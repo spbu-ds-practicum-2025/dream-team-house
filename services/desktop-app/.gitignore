@@ -1,4 +1,5 @@
 build/
+dist/
 *.user
 *.autosave
 .DS_Store

@@ -42,6 +42,14 @@ http:
         certResolver: letsencrypt
       service: analytics
 
+    downloads:
+      rule: "Host(`__FRONTEND_DOMAIN__`) && PathPrefix(`/downloads/`)"
+      entryPoints: ["websecure"]
+      tls:
+        certResolver: letsencrypt
+      priority: 100
+      service: downloads
+
   services:
     frontend:
       loadBalancer:
@@ -72,3 +80,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://analytics-service:8000"
+
+    downloads:
+      loadBalancer:
+        servers:
+          - url: "http://downloads:80"

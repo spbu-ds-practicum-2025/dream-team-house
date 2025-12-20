@@ -1,29 +1,30 @@
-/**
- * Dream Team Desktop Application
- * Cross-platform Qt application for distributed document editing
- */
-
 #include <QApplication>
-#include <QMainWindow>
-#include <QMessageBox>
 
-int main(int argc, char *argv[])
+#include "api_client.h"
+#include "app_config.h"
+#include "main_window.h"
+#include "session_state.h"
+#include "window_manager.h"
+
+int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName("Dream Team Desktop");
-    app.setApplicationVersion("1.0.0");
-    app.setOrganizationName("Dream Team");
+    app.setApplicationName(QStringLiteral("Dream Team House Desktop"));
+    app.setOrganizationName(QStringLiteral("Dream Team House"));
 
-    // TODO: Create and show main window
-    QMessageBox::information(nullptr, 
-        "Dream Team Desktop", 
-        "Desktop application starting...\n\n"
-        "TODO: Implement main window with:\n"
-        "- Document initialization tab\n"
-        "- Document viewing tab\n"
-        "- Edits history tab\n"
-        "- Chat tab\n"
-        "- Analytics tab");
+    const auto config = loadAppConfig(app);
+    app.setApplicationVersion(config.version);
 
-    return 0;
+    auto* state = new SessionState(&app);
+    auto* api = new ApiClient(config, &app);
+    auto* manager = new WindowManager(api, state, &app);
+
+    auto* mainWindow = new MainWindow(manager);
+    manager->setMainWindow(mainWindow);
+    mainWindow->show();
+
+    // Start with init/document windows easily reachable
+    manager->showOrActivate(WindowType::Init);
+
+    return app.exec();
 }
