@@ -188,16 +188,18 @@ jobs:
           ls -la
           
           echo "=== Copying files to server (tar.gz) ==="
-          tar -czf deploy.tgz \
+          ARCHIVE="/tmp/dream-team-house-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tgz"
+          
+          tar -C . -czf "${ARCHIVE}" \
           --exclude='.git' \
           --exclude='desktop-artifact' \
-          --exclude='deploy.tgz' \
           .
           
-          
-          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} deploy.tgz \
+          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} "${ARCHIVE}" \
           "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/dream-team-house/deploy.tgz.tmp"
-        
+          
+          rm -f "${ARCHIVE}"
+          
           sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
           "set -euo pipefail; \
            cd /opt/dream-team-house; \
