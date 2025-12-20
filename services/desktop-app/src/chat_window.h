@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include <QTimer>
+#include <QJsonArray>
 
 class ApiClient;
 class NavigationBar;

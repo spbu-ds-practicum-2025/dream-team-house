@@ -21,49 +21,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
           version: '6.6.3'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_mingw'
+          arch: 'win64_msvc2019_64'
           modules: 'qtcharts'
-          tools: 'tools_mingw1120'
           cache: true
 
       - name: Configure desktop app
         shell: pwsh
         run: |
-          $qtTools = Join-Path (Split-Path (Split-Path $env:Qt6_DIR -Parent) -Parent) "Tools\mingw1120_64\bin"
-          $env:Path = "$env:Qt6_DIR\bin;$qtTools;$env:Path"
+          $env:Path = "$env:Qt6_DIR\bin;$env:Path"
           $apiUrl = if ($env:TEXT_SERVICE_A_DOMAIN) { "https://$($env:TEXT_SERVICE_A_DOMAIN)" } else { "" }
           $chatUrl = if ($env:CHAT_SERVICE_DOMAIN) { "https://$($env:CHAT_SERVICE_DOMAIN)" } else { "" }
           $analyticsUrl = if ($env:ANALYTICS_SERVICE_DOMAIN) { "https://$($env:ANALYTICS_SERVICE_DOMAIN)" } else { "" }
-          cmake -S services/desktop-app -B build -G "Ninja" `
+          cmake -S services/desktop-app -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DTEXT_API_URL="$apiUrl" `
             -DCHAT_API_URL="$chatUrl" `
             -DANALYTICS_API_URL="$analyticsUrl" `
-            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR" `
-            -DCMAKE_C_COMPILER="gcc" `
-            -DCMAKE_CXX_COMPILER="g++" `
-            -DCMAKE_MAKE_PROGRAM="ninja"
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
 
       - name: Build desktop app
         shell: pwsh
         run: |
-          $qtTools = Join-Path (Split-Path (Split-Path $env:Qt6_DIR -Parent) -Parent) "Tools\mingw1120_64\bin"
-          $env:Path = "$env:Qt6_DIR\bin;$qtTools;$env:Path"
+          $env:Path = "$env:Qt6_DIR\bin;$env:Path"
           cmake --build build --config Release
 
       - name: Bundle portable package
         shell: pwsh
         run: |
-          $qtTools = Join-Path (Split-Path (Split-Path $env:Qt6_DIR -Parent) -Parent) "Tools\mingw1120_64\bin"
-          $env:PATH = "$env:Qt6_DIR\bin;$qtTools;$env:PATH"
+          $env:PATH = "$env:Qt6_DIR\bin;$env:PATH"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item build\bin\dream-team-desktop.exe dist\
+          $binaryPath = "build\bin\dream-team-desktop.exe"
+          if (-not (Test-Path $binaryPath)) {
+            $binaryPath = "build\bin\Release\dream-team-desktop.exe"
+          }
+          if (-not (Test-Path $binaryPath)) {
+            $binaryPath = "build\Release\dream-team-desktop.exe"
+          }
+          Copy-Item $binaryPath dist\
           & "$env:Qt6_DIR\bin\windeployqt.exe" --release dist\dream-team-desktop.exe --dir dist
 
       - name: Create desktop zip
