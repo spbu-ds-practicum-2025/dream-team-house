@@ -34,7 +34,7 @@ jobs:
       - name: Configure desktop app
         shell: pwsh
         run: |
-          $qtTools = Join-Path (Split-Path $env:Qt6_DIR -Parent) "Tools\mingw1120_64\bin"
+          $qtTools = Join-Path (Split-Path (Split-Path $env:Qt6_DIR -Parent) -Parent) "Tools\mingw1120_64\bin"
           $env:Path = "$env:Qt6_DIR\bin;$qtTools;$env:Path"
           $apiUrl = if ($env:TEXT_SERVICE_A_DOMAIN) { "https://$($env:TEXT_SERVICE_A_DOMAIN)" } else { "" }
           $chatUrl = if ($env:CHAT_SERVICE_DOMAIN) { "https://$($env:CHAT_SERVICE_DOMAIN)" } else { "" }
@@ -52,14 +52,14 @@ jobs:
       - name: Build desktop app
         shell: pwsh
         run: |
-          $qtTools = Join-Path (Split-Path $env:Qt6_DIR -Parent) "Tools\mingw1120_64\bin"
+          $qtTools = Join-Path (Split-Path (Split-Path $env:Qt6_DIR -Parent) -Parent) "Tools\mingw1120_64\bin"
           $env:Path = "$env:Qt6_DIR\bin;$qtTools;$env:Path"
           cmake --build build --config Release
 
       - name: Bundle portable package
         shell: pwsh
         run: |
-          $qtTools = Join-Path (Split-Path $env:Qt6_DIR -Parent) "Tools\mingw1120_64\bin"
+          $qtTools = Join-Path (Split-Path (Split-Path $env:Qt6_DIR -Parent) -Parent) "Tools\mingw1120_64\bin"
           $env:PATH = "$env:Qt6_DIR\bin;$qtTools;$env:PATH"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item build\bin\dream-team-desktop.exe dist\
