@@ -2,10 +2,9 @@
 
 #include <QMainWindow>
 
-namespace QtCharts {
-class QChartView;
-class QLineSeries;
-}
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QChart>
 
 class ApiClient;
 class NavigationBar;
