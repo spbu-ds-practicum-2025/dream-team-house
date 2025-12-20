@@ -2,20 +2,84 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [main]
+    branches:
+      - '**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  build_desktop_windows:
+    name: Build Desktop (Windows)
+    runs-on: windows-latest
+    env:
+      TEXT_SERVICE_A_DOMAIN: ${{ secrets.TEXT_SERVICE_A_DOMAIN }}
+      CHAT_SERVICE_DOMAIN: ${{ secrets.CHAT_SERVICE_DOMAIN }}
+      ANALYTICS_SERVICE_DOMAIN: ${{ secrets.ANALYTICS_SERVICE_DOMAIN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          cache: true
+
+      - name: Configure desktop app
+        shell: pwsh
+        run: |
+          $apiUrl = if ($env:TEXT_SERVICE_A_DOMAIN) { "https://$($env:TEXT_SERVICE_A_DOMAIN)" } else { "" }
+          $chatUrl = if ($env:CHAT_SERVICE_DOMAIN) { "https://$($env:CHAT_SERVICE_DOMAIN)" } else { "" }
+          $analyticsUrl = if ($env:ANALYTICS_SERVICE_DOMAIN) { "https://$($env:ANALYTICS_SERVICE_DOMAIN)" } else { "" }
+          cmake -S services/desktop-app -B build -G "Ninja" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DTEXT_API_URL="$apiUrl" `
+            -DCHAT_API_URL="$chatUrl" `
+            -DANALYTICS_API_URL="$analyticsUrl" `
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+
+      - name: Build desktop app
+        shell: pwsh
+        run: cmake --build build --config Release
+
+      - name: Bundle portable package
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:Qt6_DIR\bin;$env:PATH"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item build\bin\dream-team-desktop.exe dist\
+          & "$env:Qt6_DIR\bin\windeployqt.exe" --release dist\dream-team-desktop.exe --dir dist
+
+      - name: Create desktop zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\* -DestinationPath dream-team-house-desktop-win-x64.zip -Force
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-win-x64
+          path: dream-team-house-desktop-win-x64.zip
+
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
+    needs: build_desktop_windows
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download desktop artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-win-x64
+          path: desktop-artifact
 
       - name: Install sshpass and prepare known_hosts
         env:
@@ -52,6 +116,13 @@ jobs:
           POSTGRES_ANALYTICS_PASSWORD: ${{ secrets.POSTGRES_ANALYTICS_PASSWORD }}
         run: |
           set -euo pipefail
+          DESKTOP_ZIP="desktop-artifact/dream-team-house-desktop-win-x64.zip"
+          DOWNLOADS_DIR="/opt/dream-team-house/downloads/desktop/windows/x64"
+
+          if [ ! -f "$DESKTOP_ZIP" ]; then
+            echo "Desktop zip not found at $DESKTOP_ZIP"
+            exit 1
+          fi
 
           SSH_PORT_OPTION=""
           SCP_PORT_OPTION=""
@@ -64,7 +135,7 @@ jobs:
 
           echo "=== Preparing deployment directory on server ==="
           sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "sudo mkdir -p /opt/dream-team-house && sudo chown ${DEPLOY_USER}:${DEPLOY_USER} /opt/dream-team-house && sudo chmod 755 /opt/dream-team-house"
+            "sudo mkdir -p /opt/dream-team-house ${DOWNLOADS_DIR} && sudo chown -R ${DEPLOY_USER}:${DEPLOY_USER} /opt/dream-team-house && sudo chmod 755 /opt/dream-team-house ${DOWNLOADS_DIR}"
 
           echo "=== Creating Traefik dynamic.yml from template ==="
           sed -e "s|__FRONTEND_DOMAIN__|${FRONTEND_DOMAIN}|g" \
@@ -82,6 +153,11 @@ jobs:
             echo "$remaining_placeholders"
             exit 1
           fi
+
+          echo "=== Uploading desktop bundle ==="
+          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} "${DESKTOP_ZIP}" "${DEPLOY_USER}@${DEPLOY_HOST}:${DOWNLOADS_DIR}/latest.zip.tmp"
+          sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd ${DOWNLOADS_DIR} && mv latest.zip.tmp latest.zip"
 
           echo "=== Copying files to server ==="
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} -r ./* "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/
@@ -190,6 +266,12 @@ jobs:
           docker compose -f docker-compose.prod.yml ps
 
           echo "=== Deployment completed successfully ==="
+          echo "=== Hard check: downloads URL ==="
+          code="$(curl -sk -o /dev/null -w '%{http_code}' "https://${FRONTEND_DOMAIN}/downloads/desktop/windows/x64/latest.zip" || true)"
+          if [ "$code" != "200" ]; then
+            echo "Downloads endpoint returned $code"
+            exit 1
+          fi
           REMOTE_COMMANDS
 
           echo "✅ Deployment complete!"

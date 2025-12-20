@@ -202,6 +202,15 @@ services:
     networks:
       - dream-team-network
 
+  # Downloads static server for desktop bundles
+  downloads:
+    image: nginx:alpine
+    restart: always
+    volumes:
+      - /opt/dream-team-house/downloads:/usr/share/nginx/html/downloads:ro
+    networks:
+      - dream-team-network
+
   # AI Agents
   ai-agent:
     build:

@@ -1,0 +1,7 @@
+#pragma once
+
+// Generated at configure time. Do not edit manually.
+#define DTH_DEFAULT_TEXT_API_URL "@TEXT_API_URL_DEFAULT@"
+#define DTH_DEFAULT_CHAT_API_URL "@CHAT_API_URL_DEFAULT@"
+#define DTH_DEFAULT_ANALYTICS_API_URL "@ANALYTICS_API_URL_DEFAULT@"
+#define DTH_APP_VERSION "@PROJECT_VERSION@"
