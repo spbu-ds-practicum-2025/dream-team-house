@@ -6,6 +6,8 @@
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QChart>
 
+QT_CHARTS_USE_NAMESPACE
+
 class ApiClient;
 class NavigationBar;
 class SessionState;
@@ -33,6 +35,6 @@ private:
     QLabel* m_statusLabel;
     QComboBox* m_periodCombo;
     QTableWidget* m_table;
-    QtCharts::QChartView* m_chartView;
+    QChartView* m_chartView;
     QPushButton* m_refreshButton;
 };
