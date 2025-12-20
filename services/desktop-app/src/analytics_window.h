@@ -2,11 +2,9 @@
 
 #include <QMainWindow>
 
+#include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
-#include <QtCharts/QChart>
-
-QT_CHARTS_USE_NAMESPACE
 
 class ApiClient;
 class NavigationBar;
@@ -35,6 +33,6 @@ private:
     QLabel* m_statusLabel;
     QComboBox* m_periodCombo;
     QTableWidget* m_table;
-    QChartView* m_chartView;
+    QtCharts::QChartView* m_chartView;
     QPushButton* m_refreshButton;
 };

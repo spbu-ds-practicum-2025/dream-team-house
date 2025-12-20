@@ -22,8 +22,6 @@
 #include "session_state.h"
 #include "window_manager.h"
 
-using namespace QtCharts;
-
 AnalyticsWindow::AnalyticsWindow(WindowManager* manager, ApiClient* client, SessionState* state, QWidget* parent)
     : QMainWindow(parent)
     , m_manager(manager)
@@ -66,7 +64,7 @@ void AnalyticsWindow::setupUi()
     m_table->setHorizontalHeaderLabels({tr("Metric"), tr("Value")});
     layout->addWidget(m_table);
 
-    m_chartView = new QChartView(new QChart(), this);
+    m_chartView = new QtCharts::QChartView(new QtCharts::QChart(), this);
     m_chartView->setMinimumHeight(200);
     layout->addWidget(m_chartView);
 
@@ -81,8 +79,8 @@ void AnalyticsWindow::setupUi()
 
 void AnalyticsWindow::updateChart(const QJsonArray& points)
 {
-    auto* chart = new QChart();
-    auto* series = new QLineSeries(chart);
+    auto* chart = new QtCharts::QChart();
+    auto* series = new QtCharts::QLineSeries(chart);
     series->setName(tr("Token usage"));
     for (const auto& value : points) {
         const auto obj = value.toObject();
