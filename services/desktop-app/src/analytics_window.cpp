@@ -11,11 +11,9 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QtCharts/QBarSet>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
-#include <QtCharts/QValueAxis>
 
 #include "api_client.h"
 #include "navigation_bar.h"

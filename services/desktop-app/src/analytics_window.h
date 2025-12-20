@@ -5,7 +5,6 @@
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
-#include <QtCharts/QValueAxis>
 #include <QJsonArray>
 
 class ApiClient;
