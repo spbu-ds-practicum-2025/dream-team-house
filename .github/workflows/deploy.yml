@@ -150,9 +150,9 @@ jobs:
             SSH_PORT_OPTION="-p ${DEPLOY_PORT}"
             SCP_PORT_OPTION="-P ${DEPLOY_PORT}"
           fi
-          SSH_BASE_OPTS="-o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no ${SSH_PORT_OPTION}"
-          SCP_BASE_OPTS="-o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no ${SCP_PORT_OPTION}"
-
+          SSH_BASE_OPTS="-o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ServerAliveInterval=15 -o ServerAliveCountMax=4 ${SSH_PORT_OPTION}"
+          SCP_BASE_OPTS="-o StrictHostKeyChecking=yes -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ServerAliveInterval=15 -o ServerAliveCountMax=4 ${SCP_PORT_OPTION}"
+          
           echo "=== Preparing deployment directory on server ==="
           sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "sudo mkdir -p /opt/dream-team-house ${DOWNLOADS_DIR} && sudo chown -R ${DEPLOY_USER}:${DEPLOY_USER} /opt/dream-team-house && sudo chmod 755 /opt/dream-team-house ${DOWNLOADS_DIR}"
@@ -179,6 +179,14 @@ jobs:
           sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cd ${DOWNLOADS_DIR} && mv latest.zip.tmp latest.zip"
 
+          echo "=== Workspace size (top dirs) ==="
+          du -h -d 2 . | sort -h | tail -n 30
+          
+          echo "=== File count (top dirs) ==="
+          find . -maxdepth 2 -type f | wc -l
+          echo "=== What will be copied (./*) ==="
+          ls -la
+          
           echo "=== Copying files to server ==="
           sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} -r ./* "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/
 
