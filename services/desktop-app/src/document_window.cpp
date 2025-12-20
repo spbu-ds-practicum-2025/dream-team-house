@@ -14,6 +14,10 @@
 #include "session_state.h"
 #include "window_manager.h"
 
+namespace {
+constexpr int kRefreshIntervalMs = 2000;
+}
+
 DocumentWindow::DocumentWindow(WindowManager* manager, ApiClient* client, SessionState* state, QWidget* parent)
     : QMainWindow(parent)
     , m_manager(manager)
@@ -66,7 +70,7 @@ void DocumentWindow::setupUi()
 
 void DocumentWindow::startTimer()
 {
-    m_timer.setInterval(2000);
+    m_timer.setInterval(kRefreshIntervalMs);
     connect(&m_timer, &QTimer::timeout, this, &DocumentWindow::refreshDocument);
     m_timer.start();
 }

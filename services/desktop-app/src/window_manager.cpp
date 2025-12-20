@@ -70,6 +70,8 @@ QWidget* WindowManager::ensureWindow(WindowType type)
             connectWindowLifecycle(m_settingsWindow, type);
         }
         return m_settingsWindow;
+    default:
+        return nullptr;
     }
     return nullptr;
 }

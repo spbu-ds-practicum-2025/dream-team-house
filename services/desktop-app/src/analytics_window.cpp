@@ -83,12 +83,12 @@ void AnalyticsWindow::updateChart(const QJsonArray& points)
 {
     auto* chart = new QChart();
     auto* series = new QLineSeries(chart);
+    series->setName(tr("Token usage"));
     for (const auto& value : points) {
         const auto obj = value.toObject();
         const auto ts = obj.value("timestamp").toString();
         const auto val = obj.value("value").toDouble();
         series->append(series->count(), val);
-        series->setName(ts);
     }
     chart->addSeries(series);
     chart->createDefaultAxes();
