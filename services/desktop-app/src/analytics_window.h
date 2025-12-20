@@ -5,6 +5,13 @@
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
+#include <QJsonArray>
+
+namespace QtCharts {
+class QChart;
+class QChartView;
+class QLineSeries;
+}
 
 class ApiClient;
 class NavigationBar;
