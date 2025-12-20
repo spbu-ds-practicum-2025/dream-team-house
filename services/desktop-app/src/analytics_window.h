@@ -8,8 +8,6 @@
 #include <QtCharts/QValueAxis>
 #include <QJsonArray>
 
-QT_CHARTS_USE_NAMESPACE
-
 class ApiClient;
 class NavigationBar;
 class SessionState;
@@ -37,6 +35,6 @@ private:
     QLabel* m_statusLabel;
     QComboBox* m_periodCombo;
     QTableWidget* m_table;
-    QChartView* m_chartView;
+    QtCharts::QChartView* m_chartView;
     QPushButton* m_refreshButton;
 };
