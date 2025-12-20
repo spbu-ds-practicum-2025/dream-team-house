@@ -187,9 +187,24 @@ jobs:
           echo "=== What will be copied (./*) ==="
           ls -la
           
-          echo "=== Copying files to server ==="
-          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} -r ./* "${DEPLOY_USER}@${DEPLOY_HOST}":/opt/dream-team-house/
-
+          echo "=== Copying files to server (tar.gz) ==="
+          tar -czf deploy.tgz \
+          --exclude='.git' \
+          --exclude='desktop-artifact' \
+          --exclude='deploy.tgz' \
+          .
+          
+          
+          sshpass -p "${DEPLOY_PASS}" scp ${SCP_BASE_OPTS} deploy.tgz \
+          "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/dream-team-house/deploy.tgz.tmp"
+        
+          sshpass -p "${DEPLOY_PASS}" ssh ${SSH_BASE_OPTS} "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          "set -euo pipefail; \
+           cd /opt/dream-team-house; \
+           mv deploy.tgz.tmp deploy.tgz; \
+           tar -xzf deploy.tgz; \
+           rm -f deploy.tgz"
+  
           echo "=== Creating .env file on server ==="
           umask 077  # Set restrictive permissions for env_file
           cat > env_file << EOF
