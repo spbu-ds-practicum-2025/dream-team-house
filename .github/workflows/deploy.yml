@@ -27,13 +27,14 @@ jobs:
           version: '6.6.3'
           host: 'windows'
           target: 'desktop'
-          arch: 'win64_msvc2019_64'
+          arch: 'win64_mingw'
           modules: 'qtcharts'
           cache: true
 
       - name: Configure desktop app
         shell: pwsh
         run: |
+          $env:Path = "$env:Qt6_DIR\bin;$env:Qt6_DIR\..\Tools\mingw1120_64\bin;$env:Path"
           $apiUrl = if ($env:TEXT_SERVICE_A_DOMAIN) { "https://$($env:TEXT_SERVICE_A_DOMAIN)" } else { "" }
           $chatUrl = if ($env:CHAT_SERVICE_DOMAIN) { "https://$($env:CHAT_SERVICE_DOMAIN)" } else { "" }
           $analyticsUrl = if ($env:ANALYTICS_SERVICE_DOMAIN) { "https://$($env:ANALYTICS_SERVICE_DOMAIN)" } else { "" }
@@ -46,12 +47,14 @@ jobs:
 
       - name: Build desktop app
         shell: pwsh
-        run: cmake --build build --config Release
+        run: |
+          $env:Path = "$env:Qt6_DIR\bin;$env:Qt6_DIR\..\Tools\mingw1120_64\bin;$env:Path"
+          cmake --build build --config Release
 
       - name: Bundle portable package
         shell: pwsh
         run: |
-          $env:PATH = "$env:Qt6_DIR\bin;$env:PATH"
+          $env:PATH = "$env:Qt6_DIR\bin;$env:Qt6_DIR\..\Tools\mingw1120_64\bin;$env:PATH"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item build\bin\dream-team-desktop.exe dist\
           & "$env:Qt6_DIR\bin\windeployqt.exe" --release dist\dream-team-desktop.exe --dir dist
